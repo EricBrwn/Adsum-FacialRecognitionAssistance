@@ -1,0 +1,20 @@
+
+body { text-align: center; background-color: #111; color: white; font-family: Arial, sans-serif; }
+#contenedor-camara { position: relative; display: inline-block; margin-top: 20px; }
+video { border: 3px solid #4CAF50; border-radius: 10px; }
+canvas { position: absolute; top: 0; left: 0; }
+
+/* Diseño del botón y la ventana Modal */
+#btnAbrirAdmin { display: block; margin: 20px auto; padding: 15px 30px; background-color: #34495e; color: white; border: none; border-radius: 50px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+#modalAdmin { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; }
+.modal-contenido { background-color: #2f3640; padding: 30px; border-radius: 15px; width: 90%; max-width: 400px; color: white; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+.modal-contenido h2 { color: #fbc531; margin-top: 0; }
+.modal-label { font-size: 18px; display: block; margin-bottom: 10px; }
+#selectGrupo { width: 100%; padding: 15px; font-size: 18px; border-radius: 8px; margin-bottom: 25px; cursor: pointer; }
+.rango-horario { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 25px; }
+.rango-horario div { flex: 1; }
+.rango-horario label { font-size: 14px; color: #bdc3c7; }
+#horaInicio { width: 100%; padding: 15px 5px; font-size: 20px; border-radius: 8px; text-align: center; border: 2px solid #3498db; }
+#horaFin { width: 100%; padding: 15px 5px; font-size: 20px; border-radius: 8px; text-align: center; border: 2px solid #e74c3c; }
+#btnCerrarDia { width: 100%; padding: 15px; background-color: #e84118; color: white; border: none; border-radius: 8px; font-size: 20px; font-weight: bold; cursor: pointer; margin-bottom: 15px; }
+#btnCerrarModal { width: 100%; padding: 10px; background-color: transparent; color: #bdc3c7; border: 1px solid #bdc3c7; border-radius: 8px; font-size: 16px; cursor: pointer; }

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Registro Facial</title>
+    <link rel="stylesheet" href="./css/registro.css">
+    <script src="face-api.min.js"></script>
+</head>
+<body>
+    <h2>Registro de Nuevo Usuario</h2>
+
+    <input type="text" id="nombreUsuario" placeholder="Escribe tu nombre completo">
+    <br>
+    <input type="email" id="correoUsuario" placeholder="tucorreo@ejemplo.com">
+    <br><br>
+
+    <p>Sube una foto de tu cara (bien iluminada):</p>
+    <input type="file" id="inputFoto" accept="image/*">
+    <br><br>
+
+    <div id="contenedor-imagen">
+        <img id="imagenPrevia" src="" alt="">
+    </div>
+
+    <p id="mensajeEstado">Esperando foto...</p>
+    <button id="btnRegistrar" disabled>Guardar Registro</button>
+
+    <script type="module" src="./js/registro.js"></script>
+</body>
+</html>

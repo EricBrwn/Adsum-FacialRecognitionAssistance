@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Escáner de Entrada</title>
+    <link rel="stylesheet" href="./css/index.css">
+    <script src="face-api.min.js"></script>
+</head>
+<body>
+    <h1>Cámara de Seguridad - Puerta Principal</h1>
+    <p id="mensajeScanner">Iniciando sistema...</p>
+    
+    <div id="contenedor-camara">
+        <video id="camara" width="720" height="560" autoplay muted></video>
+    </div>
+
+    <button id="btnAbrirAdmin">⚙️ Configurar Pase de Lista</button>
+    
+    <div id="modalAdmin">
+        <div class="modal-contenido">
+            <h2>Pase de Lista</h2>
+            
+            <label class="modal-label">👥 ¿A quién esperamos hoy?</label>
+            <select id="selectGrupo">
+                <option value="todos">Cargando grupos de Firebase...</option>
+            </select>
+    
+            <label class="modal-label">⏰ Rango de llegada válido:</label>
+            <div class="rango-horario">
+                <div>
+                    <label>Desde:</label>
+                    <input type="time" id="horaInicio" value="18:00">
+                </div>
+                <div>
+                    <label>Hasta:</label>
+                    <input type="time" id="horaFin" value="23:59">
+                </div>
+            </div>
+    
+            <button id="btnCerrarDia">Ver Faltas Ahora</button>
+            <button id="btnCerrarModal">Cancelar</button>
+        </div>
+    </div>
+
+    <script type="module" src="./js/index.js"></script>
+</body>
+</html>
