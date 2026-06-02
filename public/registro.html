@@ -22,6 +22,17 @@
         <img id="imagenPrevia" src="" alt="">
     </div>
 
+    <br><br>
+
+    <p>Asignar Grupo(s):</p>
+    <div style="display: flex; gap: 10px; justify-content: center; max-width: 300px; margin: 0 auto;">
+        <input type="text" id="inputGrupo" list="listaGrupos" placeholder="Escribe o selecciona un grupo">
+        <button type="button" id="btnAgregarGrupo" style="padding: 5px 10px; background-color: #2ecc71;">+</button>
+    </div>
+    <datalist id="listaGrupos"></datalist>
+    
+    <div id="contenedorTags"></div>
+
     <p id="mensajeEstado">Esperando foto...</p>
     <button id="btnRegistrar" disabled>Guardar Registro</button>
 

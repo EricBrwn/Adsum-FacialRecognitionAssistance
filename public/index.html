@@ -18,27 +18,33 @@
     
     <div id="modalAdmin">
         <div class="modal-contenido">
-            <h2>Pase de Lista</h2>
+            <h2>InsertarNombreDelProyecto</h2>
             
-            <label class="modal-label">👥 ¿A quién esperamos hoy?</label>
+            <label class="modal-label">👥 Grupo: </label>
             <select id="selectGrupo">
                 <option value="todos">Cargando grupos de Firebase...</option>
             </select>
     
-            <label class="modal-label">⏰ Rango de llegada válido:</label>
-            <div class="rango-horario">
+            <label class="modal-label">⏰ Hora del Pase de Lista:</label>
+            <div class="fila-tiempos">
                 <div>
-                    <label>Desde:</label>
-                    <input type="time" id="horaInicio" value="18:00">
+                    <label style="font-size: 12px; color: #aaa;">Desde:</label>
+                    <input type="time" id="horaInicio">
                 </div>
                 <div>
-                    <label>Hasta:</label>
-                    <input type="time" id="horaFin" value="23:59">
+                    <label style="font-size: 12px; color: #aaa;">Hasta:</label>
+                    <input type="time" id="horaFin">
                 </div>
             </div>
+
+            <label class="modal-label">📝 ¿Qué clase es?</label>
+            <input type="text" id="inputReunion" list="listaReuniones" placeholder="Ej: Clase1, Clase3...">
+            <datalist id="listaReuniones"></datalist>
     
-            <button id="btnCerrarDia">Ver Faltas Ahora</button>
-            <button id="btnCerrarModal">Cancelar</button>
+            <button id="btnCerrarDia">Generar Reporte Completo</button>
+            <button id="btnCerrarModal">Cerrar Ventana</button>
+
+            <div id="areaReporte"></div>
         </div>
     </div>
 
