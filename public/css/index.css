@@ -1,17 +1,16 @@
-
 body { text-align: center; background-color: #111; color: white; font-family: Arial, sans-serif; }
-#contenedor-camara { position: relative; display: inline-block; margin-top: 20px; }
+#cameraContainer { position: relative; display: inline-block; margin-top: 20px; }
 video { border: 3px solid #4CAF50; border-radius: 10px; }
 canvas { position: absolute; top: 0; left: 0; }
 
-/* Diseño del botón y la ventana Modal */
-#btnAbrirAdmin { display: block; margin: 20px auto; padding: 15px 30px; background-color: #34495e; color: white; border: none; border-radius: 50px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-#modalAdmin { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; }
+/* Button and Modal Design */
+#openAdminBtn { display: block; margin: 20px auto; padding: 15px 30px; background-color: #34495e; color: white; border: none; border-radius: 50px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+#adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; }
 
-/* 1. EL CONTENEDOR PRINCIPAL (Flexbox en acción) */
-.modal-contenido {
+/* 1. MAIN CONTAINER (Flexbox in action) */
+.modal-content {
     background-color: #2a2d34;
-    padding: 30px; /* Redujimos de 40 a 30 para equilibrar el espacio horizontal */
+    padding: 30px; 
     border-radius: 15px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     display: flex;
@@ -22,17 +21,17 @@ canvas { position: absolute; top: 0; left: 0; }
     max-width: 420px;
     max-height: 85vh; 
     overflow-y: auto; 
-    box-sizing: border-box; /* 👈 CRUCIAL: Mantiene todo rígidamente centrado */
+    box-sizing: border-box; 
 }
 
-/* Magia para ocultar la barra fea de Windows y hacer una moderna */
-.modal-contenido::-webkit-scrollbar { width: 8px; }
-.modal-contenido::-webkit-scrollbar-track { background: #2a2d34; border-radius: 10px; }
-.modal-contenido::-webkit-scrollbar-thumb { background-color: #555; border-radius: 10px; }
-.modal-contenido::-webkit-scrollbar-thumb:hover { background-color: #777; }
+/* Custom modern scrollbar */
+.modal-content::-webkit-scrollbar { width: 8px; }
+.modal-content::-webkit-scrollbar-track { background: #2a2d34; border-radius: 10px; }
+.modal-content::-webkit-scrollbar-thumb { background-color: #555; border-radius: 10px; }
+.modal-content::-webkit-scrollbar-thumb:hover { background-color: #777; }
 
-/* 2. TEXTOS Y ETIQUETAS */
-.modal-contenido h2 {
+/* 2. TEXTS AND LABELS */
+.modal-content h2 {
     color: #fbc531;
     margin-top: 0;
     margin-bottom: 5px;
@@ -42,13 +41,13 @@ canvas { position: absolute; top: 0; left: 0; }
     font-weight: bold;
     font-size: 15px;
     color: #e0e0e0;
-    margin-bottom: -5px; /* Acerca el texto a su respectiva caja */
+    margin-bottom: -5px; 
 }
 
-/* 3. CAJAS DE TEXTO Y SELECTORES */
-.modal-contenido select,
-.modal-contenido input[type="text"],
-.modal-contenido input[type="time"] {
+/* 3. INPUT BOXES AND SELECTORS */
+.modal-content select,
+.modal-content input[type="text"],
+.modal-content input[type="time"] {
     width: 100%;
     padding: 12px;
     border-radius: 8px;
@@ -57,32 +56,32 @@ canvas { position: absolute; top: 0; left: 0; }
     color: #333;
     font-size: 15px;
     text-align: center;
-    box-sizing: border-box; /* Evita que las cajas se salgan de los bordes */
+    box-sizing: border-box; 
     outline: none;
 }
 
-.modal-contenido input:focus,
-.modal-contenido select:focus {
-    border-color: #fbc531; /* Borde amarillo al seleccionarlo */
+.modal-content input:focus,
+.modal-content select:focus {
+    border-color: #fbc531; 
 }
 
-/* 4. LA CAJA DE LAS HORAS (Flexbox horizontal) */
-.fila-tiempos {
+/* 4. TIME ROW (Horizontal Flexbox) */
+.time-row {
     display: flex;
-    justify-content: space-between; /* Empuja un reloj a la izq. y otro a la der. */
+    justify-content: space-between; 
     gap: 15px;
     width: 100%;
 }
 
-.fila-tiempos div {
-    flex: 1; /* Obliga a que ambas cajas de hora midan exactamente lo mismo */
+.time-row div {
+    flex: 1; 
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
-/* 5. BOTONES */
-#btnCerrarDia {
+/* 5. BUTTONS */
+#generateReportBtn {
     width: 100%;
     padding: 14px;
     background-color: #e84118;
@@ -96,14 +95,14 @@ canvas { position: absolute; top: 0; left: 0; }
     transition: 0.2s;
 }
 
-#btnCerrarDia:hover {
+#generateReportBtn:hover {
     background-color: #c23616;
 }
 
-#btnCerrarModal {
+#closeModalBtn {
     width: 100%;
     padding: 14px;
-    background-color: #4b6584; /* Azul grisáceo muy elegante */
+    background-color: #4b6584; 
     color: white;
     font-weight: bold;
     border: none;
@@ -112,18 +111,15 @@ canvas { position: absolute; top: 0; left: 0; }
     font-size: 16px;
     margin-top: 5px;
     transition: 0.3s;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.2); /* Ligera sombra para que parezca botón físico */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2); 
 }
 
-#btnCerrarModal:hover {
-    background-color: #778ca3; /* Se aclara al pasar el mouse */
+#closeModalBtn:hover {
+    background-color: #778ca3; 
 }
 
-/* Permitir que la ventana tenga scroll si la lista de alumnos es muy grande */
-.modal-contenido { max-height: 85vh; overflow-y: auto; }
-
-/* Caja del reporte */
-#areaReporte { 
+/* Report Area */
+#reportArea { 
     display: none; 
     text-align: left; 
     background: #1e222b; 
@@ -135,12 +131,12 @@ canvas { position: absolute; top: 0; left: 0; }
     width: 100%; 
     box-sizing: border-box; 
 }
-#areaReporte ul { padding-left: 20px; margin: 5px 0 15px 0; }
-#areaReporte li { margin-bottom: 4px; }
-#inputReunion { width: 100%; padding: 12px 5px; font-size: 16px; border-radius: 8px; text-align: center; margin-bottom: 25px; border: 2px solid #9b59b6; background: #fff; color: #000; }
+#reportArea ul { padding-left: 20px; margin: 5px 0 15px 0; }
+#reportArea li { margin-bottom: 4px; }
+#sessionInput { width: 100%; padding: 12px 5px; font-size: 16px; border-radius: 8px; text-align: center; margin-bottom: 25px; border: 2px solid #9b59b6; background: #fff; color: #000; }
 
-/* --- Buscador Inteligente Modal --- */
-#buscadorGruposModal {
+/* --- Smart Group Searcher Modal --- */
+#modalGroupSearch {
     width: 100%;
     padding: 12px;
     border-radius: 8px;
@@ -154,11 +150,11 @@ canvas { position: absolute; top: 0; left: 0; }
     cursor: text;
 }
 
-#buscadorGruposModal:focus {
+#modalGroupSearch:focus {
     border-color: #fbc531;
 }
 
-.dropdown-resultados {
+.dropdown-results {
     position: absolute;
     top: 100%;
     left: 0;
@@ -185,4 +181,30 @@ canvas { position: absolute; top: 0; left: 0; }
 .dropdown-item:hover {
     background-color: #f1f2f6;
     color: #000;
+}
+
+
+
+/* --- Marca de Agua Adsum / EricBrwn --- */
+.watermark {
+    position: fixed;
+    bottom: 15px;
+    right: 20px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4); /* Color blanco casi transparente */
+    font-family: 'Courier New', Courier, monospace; /* Estilo hacker/código */
+    pointer-events: none; /* Evita que estorbe si haces clic sobre ella */
+    z-index: 9999; /* Asegura que siempre esté por encima de todo */
+    letter-spacing: 1px;
+    transition: color 0.3s ease;
+}
+
+/* Efecto opcional: se ilumina un poco si le pasas el mouse cerca */
+.watermark:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.watermark span {
+    color: #fbc531; /* Un toque sutil del amarillo de tu diseño para tu nombre */
+    opacity: 0.7;
 }

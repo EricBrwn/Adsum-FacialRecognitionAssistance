@@ -1,6 +1,10 @@
-body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+body { 
+    font-family: Arial, sans-serif; 
+    text-align: center; 
+    padding: 20px; 
+}
 
-#contenedor-imagen { 
+#imageContainer { 
     margin: 10px auto; 
     width: 100%; 
     max-width: 200px; 
@@ -20,8 +24,8 @@ img {
     object-fit: contain; 
 }
 
-/* Contenedor de las casillas */
-.caja-grupos {
+/* Checkbox container */
+.groups-box {
     display: flex;
     flex-wrap: wrap; 
     justify-content: center;
@@ -30,11 +34,11 @@ img {
     max-width: 500px;
 }
 
-/* Estilo moderno para cada opción de grupo */
-.grupo-opcion {
+/* Modern style for each group option */
+.group-option {
     background-color: #f1f2f6;
     padding: 8px 14px;
-    border-radius: 20px; /* Estilo píldora */
+    border-radius: 20px; /* Pill style */
     cursor: pointer;
     font-size: 14px;
     color: #2f3542;
@@ -45,33 +49,33 @@ img {
     user-select: none;
 }
 
-.grupo-opcion:hover {
+.group-option:hover {
     background-color: #dfe4ea;
     border-color: #007bff;
 }
 
-.grupo-opcion input {
+.group-option input {
     margin-right: 6px;
     cursor: pointer;
 }
 
-/* Bloque inferior para añadir nuevos grupos */
-.creador-grupo-bloque {
+/* Bottom block to add new groups */
+.group-creator-block {
     display: flex; 
     gap: 8px; 
     justify-content: center; 
     margin-bottom: 25px;
 }
 
-.creador-grupo-bloque input {
+.group-creator-block input {
     padding: 8px;
     border: 1px solid #ccc;
     border-radius: 5px;
     width: 200px;
 }
 
-/* Buscador principal */
-#buscadorGrupos {
+/* Main search bar */
+#groupSearch {
     width: 100%;
     padding: 10px;
     border: 2px solid #ccc;
@@ -80,13 +84,13 @@ img {
     box-sizing: border-box;
 }
 
-#buscadorGrupos:focus {
+#groupSearch:focus {
     border-color: #007bff;
     outline: none;
 }
 
-/* Menú desplegable de resultados */
-.dropdown-resultados {
+/* Dropdown results menu */
+.dropdown-results {
     position: absolute;
     top: 100%;
     left: 0;
@@ -97,7 +101,7 @@ img {
     max-height: 180px;
     overflow-y: auto;
     z-index: 1000;
-    display: none; /* Oculto por defecto */
+    display: none; /* Hidden by default */
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
@@ -113,22 +117,48 @@ img {
     background-color: #f1f2f6;
 }
 
-/* Estilo para los cuadros de Nombre y Correo */
-#nombreUsuario, 
-#correoUsuario {
+/* Style for Name and Email inputs */
+#userName, 
+#userEmail {
     width: 100%;
-    max-width: 350px; /* Lo hace lo suficientemente ancho para nombres largos */
-    padding: 10px;    /* Le da espacio interno para que el texto respire */
+    max-width: 350px; 
+    padding: 10px;    
     border: 2px solid #ccc;
-    border-radius: 8px; /* Bordes redondeados como el buscador */
+    border-radius: 8px; 
     font-size: 14px;
     box-sizing: border-box;
-    margin-bottom: 5px; /* Separación con el elemento de abajo */
+    margin-bottom: 5px; 
 }
 
-/* Efecto azul cuando le das clic para escribir */
-#nombreUsuario:focus, 
-#correoUsuario:focus {
+/* Blue glow effect on focus */
+#userName:focus, 
+#userEmail:focus {
     border-color: #007bff;
     outline: none;
+}
+
+
+
+/* --- Marca de Agua Adsum / EricBrwn (Versión Fondo Claro) --- */
+.watermark {
+    position: fixed;
+    bottom: 15px;
+    right: 20px;
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.4); /* Gris oscuro semitransparente para que contraste con el blanco */
+    font-family: 'Courier New', Courier, monospace;
+    pointer-events: none;
+    z-index: 9999;
+    letter-spacing: 1px;
+    transition: color 0.3s ease;
+}
+
+.watermark:hover {
+    color: rgba(0, 0, 0, 0.8); /* Se vuelve casi negro al pasar el mouse */
+}
+
+.watermark span {
+    color: #2c3e50; /* Un azul oscuro/gris muy elegante para tu firma artística */
+    font-weight: bold;
+    opacity: 0.9;
 }

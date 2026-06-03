@@ -1,344 +1,337 @@
 import { db } from "./firebase-config.js";
 import { collection, getDocs, addDoc, query, where, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
-const video = document.getElementById('camara');
-const mensaje = document.getElementById('mensajeScanner');
+const video = document.getElementById('camera');
+const scannerMessage = document.getElementById('scannerMessage');
 
-const toleranciaReconocimiento = 0.45; // Ajusta este valor para ser más o menos estricto en el reconocimiento facial
+const recognitionTolerance = 0.45; // Adjust this value to be more or less strict on facial recognition
 
-let rostrosConocidos = []; 
-let mapaCorreos = {}; 
-let basesDeDatosGrupos = {}; 
-let diccionarioUsuarios = {}; // NUEVO: Guarda objeto completo {correo: {nombre, grupos}}
-let comparadorFacial = null; 
-let opcionesGrupos = []; // NUEVO: Guardará la lista de grupos para el buscador
+let knownFaces = []; 
+let emailMap = {}; 
+let groupDatabases = {}; 
+let userDictionary = {}; // Saves complete object {email: {name, groups}}
+let faceMatcher = null; 
+let groupOptions = []; // Will store the list of groups for the searcher
 
-// Inicializar EmailJS con la Public Key
+// Initialize EmailJS with your Public Key
 emailjs.init("PVySdKrUGNpDOYaCs");
 
-async function inicializarEscaner() {
+async function initializeScanner() {
     try {
-        mensaje.innerText = "1/3 Cargando IA...";
+        scannerMessage.innerText = "1/3 Loading AI...";
         await faceapi.nets.ssdMobilenetv1.loadFromUri('./models');
         await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
         await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
         
-        mensaje.innerText = "2/3 Encendiendo cámara...";
-        await encenderCamara(); 
+        scannerMessage.innerText = "2/3 Turning on camera...";
+        await turnOnCamera(); 
 
-        mensaje.innerText = "3/3 Sincronizando Base de Datos...";
-        await descargarDatosFirebase();
-        await cargarReunionesAutocompletado();
+        scannerMessage.innerText = "3/3 Synchronizing Database...";
+        await downloadFirebaseData();
+        await loadSessionAutocomplete();
         
     } catch (error) {
         console.error(error);
-        mensaje.innerText = "Error crítico al inicializar.";
-        mensaje.style.color = "red";
+        scannerMessage.innerText = "Critical error during initialization.";
+        scannerMessage.style.color = "red";
     }
-    iniciarReconocimiento();
+    startRecognition();
 }
 
-async function encenderCamara() {
+async function turnOnCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = stream;
     } catch (error) {
-        alert("⛔ No se pudo acceder a la cámara.");
+        alert("⛔ Could not access the camera.");
         throw error; 
     }
 }
 
-async function descargarDatosFirebase() {
+async function downloadFirebaseData() {
     try {
-        rostrosConocidos = []; mapaCorreos = {}; basesDeDatosGrupos = {}; diccionarioUsuarios = {};
+        knownFaces = []; emailMap = {}; groupDatabases = {}; userDictionary = {};
         const querySnapshot = await getDocs(collection(db, "Users"));
         
         querySnapshot.forEach((doc) => {
-            const datos = doc.data();
-            if (!datos.nombreCompleto || !datos.descriptor) return; 
+            const data = doc.data();
+            // Note: Now looking for 'fullName' to match English registration
+            if (!data.fullName || !data.descriptor) return; 
 
-            const nombre = String(datos.nombreCompleto);
-            const correo = doc.id;
-            mapaCorreos[nombre] = correo;
+            const name = String(data.fullName);
+            const email = doc.id;
+            emailMap[name] = email;
             
-            const gruposDeLaPersona = datos.grupos || ["Sin Grupo"];
+            // Note: Now looking for 'groups'
+            const personGroups = data.groups || ["No Group"];
             
-            // Llenamos el diccionario maestro para usarlo en el reporte final
-            diccionarioUsuarios[correo] = { nombre: nombre, grupos: gruposDeLaPersona };
+            // Fill the master dictionary for the final report
+            userDictionary[email] = { name: name, groups: personGroups };
     
-            gruposDeLaPersona.forEach(nombreGrupo => {
-                if (!basesDeDatosGrupos[nombreGrupo]) basesDeDatosGrupos[nombreGrupo] = [];
-                basesDeDatosGrupos[nombreGrupo].push(correo);
+            personGroups.forEach(groupName => {
+                if (!groupDatabases[groupName]) groupDatabases[groupName] = [];
+                groupDatabases[groupName].push(email);
             });
 
-            const rostroEtiquetado = new faceapi.LabeledFaceDescriptors(nombre, [new Float32Array(datos.descriptor)]);
-            rostrosConocidos.push(rostroEtiquetado);
+            const labeledFace = new faceapi.LabeledFaceDescriptors(name, [new Float32Array(data.descriptor)]);
+            knownFaces.push(labeledFace);
         });
 
-        comparadorFacial = new faceapi.FaceMatcher(rostrosConocidos, toleranciaReconocimiento);
+        faceMatcher = new faceapi.FaceMatcher(knownFaces, recognitionTolerance);
         
-        // Llenar el nuevo buscador inteligente de grupos
-        opcionesGrupos = [{ valor: "todos", texto: "Todos los registrados" }];
-        for (const grupo in basesDeDatosGrupos) {
-            opcionesGrupos.push({
-                valor: grupo,
-                texto: `${grupo} (${basesDeDatosGrupos[grupo].length} personas)`
+        // Fill the smart group searcher
+        groupOptions = [{ value: "all", text: "All registered users" }];
+        for (const group in groupDatabases) {
+            groupOptions.push({
+                value: group,
+                text: `${group} (${groupDatabases[group].length} people)`
             });
         }
         
-        // Configurar los valores por defecto
-        // Dejamos los valores en blanco para evitar envíos masivos por accidente
-        document.getElementById('buscadorGruposModal').value = "";
-        document.getElementById('selectGrupo').value = "";
-        document.getElementById('buscadorGruposModal').placeholder = "Escribe para buscar...";
+        // Configure default values (leave blank to prevent accidental massive emails)
+        document.getElementById('modalGroupSearch').value = "";
+        document.getElementById('hiddenGroupSelect').value = "";
+        document.getElementById('modalGroupSearch').placeholder = "Type to search...";
 
-        mensaje.innerText = "Sistema listo.";
-        mensaje.style.color = "lightgreen";
+        scannerMessage.innerText = "System ready.";
+        scannerMessage.style.color = "lightgreen";
     } catch (error) {
         console.error(error);
     }
 }
 
-async function cargarReunionesAutocompletado() {
-    const reunionesSnapshot = await getDocs(collection(db, "Reuniones"));
-    const datalistReuniones = document.getElementById('listaReuniones');
-    datalistReuniones.innerHTML = "";
-    reunionesSnapshot.forEach(doc => {
-        datalistReuniones.innerHTML += `<option value="${doc.id}"></option>`;
+async function loadSessionAutocomplete() {
+    const sessionsSnapshot = await getDocs(collection(db, "Sessions"));
+    const sessionDatalist = document.getElementById('sessionList');
+    sessionDatalist.innerHTML = "";
+    sessionsSnapshot.forEach(doc => {
+        sessionDatalist.innerHTML += `<option value="${doc.id}"></option>`;
     });
 }
 
-let ultimoRegistroUsuario = {}; 
-async function registrarAcceso(nombrePersona) {
-    const tiempoActual = Date.now(); 
-    if (ultimoRegistroUsuario[nombrePersona] && (tiempoActual - ultimoRegistroUsuario[nombrePersona] < 60000)) return; 
+let lastUserLog = {}; 
+async function logAccess(personName) {
+    const currentTime = Date.now(); 
+    if (lastUserLog[personName] && (currentTime - lastUserLog[personName] < 60000)) return; 
 
-    ultimoRegistroUsuario[nombrePersona] = tiempoActual;
-    const correoDeLaPersona = mapaCorreos[nombrePersona] || "Desconocido";
+    lastUserLog[personName] = currentTime;
+    const personEmail = emailMap[personName] || "Unknown";
 
     try {
-        const fechaActual = new Date();
-        await addDoc(collection(db, "Historial"), {
-            nombre: nombrePersona,
-            correo: correoDeLaPersona,
-            fecha: fechaActual.toLocaleDateString(), 
-            hora: fechaActual.toLocaleTimeString(),  
-            timestamp: tiempoActual 
+        const currentDate = new Date();
+        await addDoc(collection(db, "History"), {
+            name: personName,
+            email: personEmail,
+            date: currentDate.toLocaleDateString(), 
+            time: currentDate.toLocaleTimeString(),  
+            timestamp: currentTime 
         });
-        console.log(`✅ Bitácora: Entrada de ${nombrePersona} registrada.`);
+        console.log(`✅ Log: Entry for ${personName} registered.`);
     } catch (error) { console.error(error); }
 }
 
-async function iniciarReconocimiento() {
-    const arrancarDeteccion = async () => {
+async function startRecognition() {
+    const runDetection = async () => {
         const canvas = faceapi.createCanvasFromMedia(video);
-        document.getElementById('contenedor-camara').append(canvas);
-        const dimensiones = { width: video.width, height: video.height };
-        faceapi.matchDimensions(canvas, dimensiones);
+        document.getElementById('cameraContainer').append(canvas);
+        const dimensions = { width: video.width, height: video.height };
+        faceapi.matchDimensions(canvas, dimensions);
 
         setInterval(async () => {
-            const detecciones = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
-            const deteccionesRedimensionadas = faceapi.resizeResults(detecciones, dimensiones);
+            const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
+            const resizedDetections = faceapi.resizeResults(detections, dimensions);
             canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
 
-            deteccionesRedimensionadas.forEach(deteccion => {
-                const mejorMatch = comparadorFacial.findBestMatch(deteccion.descriptor);
-                const box = deteccion.detection.box; 
+            resizedDetections.forEach(detection => {
+                const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+                const box = detection.detection.box; 
 
-                if (mejorMatch.label !== 'unknown') {
-                    mensaje.innerText = `¡ACCESO CONCEDIDO: BIENVENIDO ${mejorMatch.label.toUpperCase()}!`;
-                    mensaje.style.color = "lightgreen";
-                    registrarAcceso(mejorMatch.label);
+                if (bestMatch.label !== 'unknown') {
+                    scannerMessage.innerText = `ACCESS GRANTED: WELCOME ${bestMatch.label.toUpperCase()}!`;
+                    scannerMessage.style.color = "lightgreen";
+                    logAccess(bestMatch.label);
                 } else {
-                    mensaje.innerText = "ACCESO DENEGADO: Persona no registrada.";
-                    mensaje.style.color = "red";
+                    scannerMessage.innerText = "ACCESS DENIED: Unregistered person.";
+                    scannerMessage.style.color = "red";
                 }   
                 new faceapi.draw.DrawBox(box, { 
-                    label: mejorMatch.toString(), 
-                    boxColor: mejorMatch.label === 'unknown' ? 'red' : 'green' 
+                    label: bestMatch.toString(), 
+                    boxColor: bestMatch.label === 'unknown' ? 'red' : 'green' 
                 }).draw(canvas);
             });
         }, 200);
     };
 
-    if (video.readyState >= 3) arrancarDeteccion();
-    else video.addEventListener('playing', arrancarDeteccion);
+    if (video.readyState >= 3) runDetection();
+    else video.addEventListener('playing', runDetection);
 }
 
-async function calcularFaltas() {
+async function calculateAbsences() {
     try {
-        const grupoSeleccionado = document.getElementById('selectGrupo').value;
-        const horaInicioHTML = document.getElementById('horaInicio').value;
-        const horaFinHTML = document.getElementById('horaFin').value;
-        const reunionSeleccionada = document.getElementById('inputReunion').value.trim();
+        const selectedGroup = document.getElementById('hiddenGroupSelect').value;
+        const startTimeHTML = document.getElementById('startTime').value;
+        const endTimeHTML = document.getElementById('endTime').value;
+        const selectedSession = document.getElementById('sessionInput').value.trim();
 
-        // NUEVO FRENO: Si el grupo está vacío (escribieron un typo o no eligieron de la lista)
-        if (grupoSeleccionado === "") {
-            alert("⚠️ Acción Detenida: Debes seleccionar un grupo válido de la lista desplegable.");
+        // FAILSAFE: Si el grupo está vacío
+        if (selectedGroup === "") {
+            alert("⚠️ Action Stopped: You must select a valid group from the dropdown list.");
             return;
         }
 
-        if (horaInicioHTML === "" || horaFinHTML === "" || reunionSeleccionada === "") {
-            // Mostramos una alerta al usuario
-            alert("⚠️ ¡Espera! Por favor llena las horas (Desde / Hasta) y el nombre de la clase antes de generar el reporte.");
-            // El 'return' actúa como un freno de mano: detiene la función aquí mismo y no ejecuta el resto del código
+        if (startTimeHTML === "" || endTimeHTML === "" || selectedSession === "") {
+            alert("⚠️ Hold on! Please fill in the times (From / To) and the session name before generating the report.");
             return; 
         }
 
-        if (!horaInicioHTML || !horaFinHTML || !reunionSeleccionada) {
-            alert("⚠️ Completa las horas y el nombre de la reunión.");
-            return;
-        }
+        // Guarda la sesión en Firebase automáticamente
+        await setDoc(doc(db, "Sessions", selectedSession), { name: selectedSession });
 
-        // Guardar la reunión automáticamente para que aparezca en el buscador la próxima vez
-        await setDoc(doc(db, "Reuniones", reunionSeleccionada), { nombre: reunionSeleccionada });
+        let guestList = (selectedGroup === "all") ? Object.keys(userDictionary) : (groupDatabases[selectedGroup] || []);
 
-        let listaInvitados = (grupoSeleccionado === "todos") ? Object.keys(diccionarioUsuarios) : (basesDeDatosGrupos[grupoSeleccionado] || []);
+        const today = new Date();
+        const [hStart, mStart] = startTimeHTML.split(':');
+        const [hEnd, mEnd] = endTimeHTML.split(':');
+        const startTimeTs = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hStart), parseInt(mStart), 0).getTime(); 
+        const endTimeTs = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hEnd), parseInt(mEnd), 0).getTime();
 
-        const hoy = new Date();
-        const [hInicio, mInicio] = horaInicioHTML.split(':');
-        const [hFin, mFin] = horaFinHTML.split(':');
-        const horaInicioTs = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), parseInt(hInicio), parseInt(mInicio), 0).getTime(); 
-        const horaFinTs = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), parseInt(hFin), parseInt(mFin), 0).getTime();
+        const queryResult = query(collection(db, "History"), where("date", "==", today.toLocaleDateString()));
+        const results = await getDocs(queryResult);
 
-        const consulta = query(collection(db, "Historial"), where("fecha", "==", hoy.toLocaleDateString()));
-        const resultados = await getDocs(consulta);
-
-        let correosAsistentes = new Set(); 
-        resultados.forEach((doc) => {
-            const datos = doc.data();
-            if (datos.correo && datos.timestamp >= horaInicioTs && datos.timestamp <= horaFinTs) {
-                correosAsistentes.add(datos.correo);
+        let attendingEmails = new Set(); 
+        results.forEach((doc) => {
+            const data = doc.data();
+            if (data.email && data.timestamp >= startTimeTs && data.timestamp <= endTimeTs) {
+                attendingEmails.add(data.email);
             }
         });
 
-        let asistentes = [];
-        let ausentes = [];
+        let attendees = [];
+        let absentees = [];
 
-        listaInvitados.forEach(correoInvitado => {
-            const infoUser = diccionarioUsuarios[correoInvitado] || { nombre: "Desconocido", grupos: ["Sin Grupo"] };
-            const estructurado = { nombre: infoUser.nombre, correo: correoInvitado, grupos: infoUser.grupos };
+        guestList.forEach(guestEmail => {
+            const userInfo = userDictionary[guestEmail] || { name: "Unknown", groups: ["No Group"] };
+            const structuredData = { name: userInfo.name, email: guestEmail, groups: userInfo.groups };
 
-            if (correosAsistentes.has(correoInvitado)) {
-                asistentes.push(estructurado);
+            if (attendingEmails.has(guestEmail)) {
+                attendees.push(structuredData);
             } else {
-                ausentes.push(estructurado);
-                
-                //¡Llamamos al cartero!
-                enviarCorreoFalta(estructurado.nombre, estructurado.correo, reunionSeleccionada);
+                absentees.push(structuredData);
+                // Llamada al correo con la nueva variable
+                sendAbsenceEmail(structuredData.name, structuredData.email, selectedSession);
             }
         });
 
-        // Dibujar el reporte en pantalla de forma bonita
-        const areaReporte = document.getElementById('areaReporte');
-        areaReporte.style.display = 'block';
+        // Dibuja el reporte visual
+        const reportArea = document.getElementById('reportArea');
+        reportArea.style.display = 'block';
 
-        let html = `<h3 style="color: #fbc531; margin-top:0; border-bottom: 1px solid #444; padding-bottom:5px;">📊 ${reunionSeleccionada.toUpperCase()}</h3>`;
-        html += `<p style="margin: 5px 0;"><strong>Filtro:</strong> Grupo ${grupoSeleccionado.toUpperCase()}</p>`;
+        let html = `<h3 style="color: #fbc531; margin-top:0; border-bottom: 1px solid #444; padding-bottom:5px;">📊 ${selectedSession.toUpperCase()}</h3>`;
+        html += `<p style="margin: 5px 0;"><strong>Filter:</strong> Group ${selectedGroup.toUpperCase()}</p>`;
         
-        html += `<h4 style="color: #2ecc71; margin-bottom:5px;">✅ ASISTIERON (${asistentes.length}):</h4><ul>`;
-        if(asistentes.length === 0) html += `<li>Nadie asistió en este rango.</li>`;
-        asistentes.forEach(p => html += `<li><strong>${p.nombre}</strong> <span style="color:#aaa; font-size:11px;">(${p.grupos.join(', ')})</span></li>`);
+        html += `<h4 style="color: #2ecc71; margin-bottom:5px;">✅ ATTENDED (${attendees.length}):</h4><ul>`;
+        if(attendees.length === 0) html += `<li>Nobody attended during this timeframe.</li>`;
+        attendees.forEach(p => html += `<li><strong>${p.name}</strong> <span style="color:#aaa; font-size:11px;">(${p.groups.join(', ')})</span></li>`);
         html += `</ul>`;
 
-        html += `<h4 style="color: #e74c3c; margin-bottom:5px;">❌ FALTARON (${ausentes.length}):</h4><ul>`;
-        if(ausentes.length === 0) html += `<li>¡Asistencia perfecta! No faltó nadie.</li>`;
-        ausentes.forEach(p => html += `<li><strong>${p.nombre}</strong> <span style="color:#aaa; font-size:11px;">(${p.grupos.join(', ')})</span></li>`);
+        html += `<h4 style="color: #e74c3c; margin-bottom:5px;">❌ ABSENT (${absentees.length}):</h4><ul>`;
+        if(absentees.length === 0) html += `<li>Perfect attendance! Nobody was absent.</li>`;
+        absentees.forEach(p => html += `<li><strong>${p.name}</strong> <span style="color:#aaa; font-size:11px;">(${p.groups.join(', ')})</span></li>`);
         html += `</ul>`;
 
-        areaReporte.innerHTML = html;
+        reportArea.innerHTML = html;
 
-    } catch (error) { console.error(error); alert("Error al procesar reporte."); }
+    } catch (error) { 
+        console.error("Error en el reporte:", error); 
+        alert("Error processing report."); 
+    }
 }
 
-async function enviarCorreoFalta(nombrePersona, correoPersona, nombreClase) {
-    // 1. Preparamos los datos exactos que pide tu plantilla de EmailJS
-    let parametros = {
-        nombre: nombrePersona,
-        correo_destino: correoPersona,
-        clase: nombreClase,
-        enlace_drive: "Enlace pendiente de añadir..." // Por ahora es texto fijo
+async function sendAbsenceEmail(personName, personEmail, sessionName) {
+    // 1. Prepare exact data payload matching the new EmailJS template
+    let parameters = {
+        name: personName,
+        target_email: personEmail,
+        class_name: sessionName,
+        drive_link: "Link pending addition..." 
     };
 
     try {
-        // 2. Le decimos al cartero que entregue el mensaje
-        // OJO: Reemplaza con tu Service ID y tu Template ID
-        let respuesta = await emailjs.send("service_s9ugx0j", "template_ayapn8q", parametros);
-        console.log("✅ Correo enviado con éxito a: " + correoPersona);
+        // 2. Tell the postman to deliver the message
+        let response = await emailjs.send("service_s9ugx0j", "template_ayapn8q", parameters);
+        console.log("✅ Email successfully sent to: " + personEmail);
     } catch (error) {
-        console.error("❌ Error al enviar correo a: " + correoPersona, error);
+        console.error("❌ Error sending email to: " + personEmail, error);
     }
 }
 
-const modal = document.getElementById('modalAdmin');
-document.getElementById('btnAbrirAdmin').addEventListener('click', () => { modal.style.display = 'flex'; });
-document.getElementById('btnCerrarModal').addEventListener('click', () => { 
-    modal.style.display = 'none'; 
-    document.getElementById('areaReporte').style.display = 'none'; // Resetea el reporte visual al cerrar
+const adminModal = document.getElementById('adminModal');
+document.getElementById('openAdminBtn').addEventListener('click', () => { adminModal.style.display = 'flex'; });
+document.getElementById('closeModalBtn').addEventListener('click', () => { 
+    adminModal.style.display = 'none'; 
+    document.getElementById('reportArea').style.display = 'none'; // Reset visual report upon closing
 });
-document.getElementById('btnCerrarDia').addEventListener('click', calcularFaltas);
+document.getElementById('generateReportBtn').addEventListener('click', calculateAbsences);
 
-// --- MOTOR DEL BUSCADOR DE GRUPOS EN EL MODAL ---
-const buscadorGruposModal = document.getElementById('buscadorGruposModal');
-const resultadosGruposModal = document.getElementById('resultadosGruposModal');
-const selectGrupoOculto = document.getElementById('selectGrupo');
+// --- MODAL SMART GROUP SEARCHER ENGINE ---
+const modalGroupSearch = document.getElementById('modalGroupSearch');
+const modalGroupResults = document.getElementById('modalGroupResults');
+const hiddenGroupSelect = document.getElementById('hiddenGroupSelect');
 
-// Cuando escribe
-buscadorGruposModal.addEventListener('input', () => {
-    let texto = buscadorGruposModal.value.toLowerCase().trim();
-    resultadosGruposModal.innerHTML = ""; 
+// When typing
+modalGroupSearch.addEventListener('input', () => {
+    let text = modalGroupSearch.value.toLowerCase().trim();
+    modalGroupResults.innerHTML = ""; 
     
-    // IMPORTANTE: Al primer teclazo, borramos el valor oculto. 
-    // Así evitamos que manden correos al grupo anterior por error.
-    selectGrupoOculto.value = ""; 
+    // IMPORTANT: Clear hidden value on first keystroke to prevent accidental previous group selection
+    hiddenGroupSelect.value = ""; 
 
-    let coincidencias = texto === "" 
-        ? opcionesGrupos 
-        : opcionesGrupos.filter(g => g.texto.toLowerCase().includes(texto));
+    let matches = text === "" 
+        ? groupOptions 
+        : groupOptions.filter(g => g.text.toLowerCase().includes(text));
 
-    // Si escribe pura basura que no existe
-    if (coincidencias.length === 0) {
-        let divError = document.createElement("div");
-        divError.className = "dropdown-item";
-        divError.style.color = "red";
-        divError.innerText = "❌ No existe este grupo";
-        resultadosGruposModal.appendChild(divError);
+    // If writing garbage that doesn't exist
+    if (matches.length === 0) {
+        let errorDiv = document.createElement("div");
+        errorDiv.className = "dropdown-item";
+        errorDiv.style.color = "red";
+        errorDiv.innerText = "❌ This group does not exist";
+        modalGroupResults.appendChild(errorDiv);
     } else {
-        coincidencias.forEach(match => {
+        matches.forEach(match => {
             let div = document.createElement("div");
             div.className = "dropdown-item";
-            div.innerText = match.texto; 
+            div.innerText = match.text; 
             
-            // Solo si da clic en una opción válida, se guarda el valor real
+            // Only if valid option clicked, save real value
             div.addEventListener("click", () => {
-                buscadorGruposModal.value = match.texto; 
-                selectGrupoOculto.value = match.valor;  
-                resultadosGruposModal.style.display = "none";
+                modalGroupSearch.value = match.text; 
+                hiddenGroupSelect.value = match.value;  
+                modalGroupResults.style.display = "none";
             });
-            resultadosGruposModal.appendChild(div);
+            modalGroupResults.appendChild(div);
         });
     }
 
-    resultadosGruposModal.style.display = "block";
+    modalGroupResults.style.display = "block";
 });
 
-// UX MEJORADA: Al dar clic, seleccionamos todo el texto para que al teclear se borre lo anterior
-buscadorGruposModal.addEventListener('focus', () => {
-    buscadorGruposModal.select(); 
-    buscadorGruposModal.dispatchEvent(new Event('input')); 
+// ENHANCED UX: Select all text on click to easily overwrite
+modalGroupSearch.addEventListener('focus', () => {
+    modalGroupSearch.select(); 
+    modalGroupSearch.dispatchEvent(new Event('input')); 
 });
 
-// Ocultar si da clic fuera del buscador y limpiar typos
+// Hide if clicked outside and clean up typos
 document.addEventListener("click", (e) => {
-    if (e.target !== buscadorGruposModal && e.target !== resultadosGruposModal) {
-        resultadosGruposModal.style.display = "none";
+    if (e.target !== modalGroupSearch && e.target !== modalGroupResults) {
+        modalGroupResults.style.display = "none";
         
-        // Si dieron clic fuera y no hay un grupo oficial seleccionado, borramos su texto inventado
-        if (selectGrupoOculto.value === "") {
-            buscadorGruposModal.value = "";
+        // If clicked outside without an official group selected, erase invented text
+        if (hiddenGroupSelect.value === "") {
+            modalGroupSearch.value = "";
         }
     }
 });
 
-
-inicializarEscaner();
+initializeScanner();

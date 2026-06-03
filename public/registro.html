@@ -1,44 +1,49 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Registro Facial</title>
+    <title>Facial Recognition Registration</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>">
     <link rel="stylesheet" href="./css/registro.css">
     <script src="face-api.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 </head>
 <body>
-    <h2>Registro de Nuevo Usuario</h2>
+    <h2>New User Registration</h2>
 
-    <input type="text" id="nombreUsuario" placeholder="Escribe tu nombre completo">
+    <input type="text" id="userName" placeholder="Enter their FULL NAME">
     <br>
-    <input type="email" id="correoUsuario" placeholder="tucorreo@ejemplo.com">
+    <input type="email" id="userEmail" placeholder="youremail@example.com">
     <br><br>
 
-    <p>Sube una foto de tu cara (bien iluminada):</p>
-    <input type="file" id="inputFoto" accept="image/*, .heic">
+    <p>Upload a photo of your face (with good lighting):</p>
+    <input type="file" id="photoInput" accept="image/*, .heic">
     <br><br>
 
-    <div id="contenedor-imagen">
-        <img id="imagenPrevia" src="" alt="">
+    <div id="imageContainer">
+        <img id="previewImage" src="" alt="">
     </div>
 
     <br><br>
 
     <div style="max-width: 400px; margin: 0 auto; text-align: left;">
-        <p style="font-weight: bold; margin-bottom: 5px;">🔍 Buscar o crear grupos:</p>
+        <p style="font-weight: bold; margin-bottom: 5px;">🔍 Search for or create groups: </p>
         <div style="position: relative;">
-            <input type="text" id="buscadorGrupos" placeholder="Escribe para buscar..." autocomplete="off">
-            <div id="resultadosBusqueda" class="dropdown-resultados"></div>
+            <input type="text" id="groupSearch" placeholder="Type to Search..." autocomplete="off">
+            <div id="searchResults" class="dropdown-results"></div>
         </div>
     </div>
 
-    <p style="margin-top: 15px; font-size: 14px; color: #555;">Grupos seleccionados:</p>
-    <div class="caja-grupos" id="contenedor-grupos"></div>
+    <p style="margin-top: 15px; font-size: 14px; color: #555;">Selected Groups:</p>
+    <div class="groups-box" id="groupsContainer"></div>
 
-    <p id="mensajeEstado">Esperando foto...</p>
-    <button id="btnRegistrar" disabled>Guardar Registro</button>
+    <p id="statusMessage">Waiting for photo...</p>
+    <button id="registerBtn" disabled>Save Registration</button>
 
     <script type="module" src="./js/registro.js"></script>
+
+    <div class="watermark">
+        Project <strong>Adsum</strong> | Developed by <span>EricBrwn</span>
+    </div>
 </body>
 </html>
