@@ -5,6 +5,7 @@
     <title>Registro Facial</title>
     <link rel="stylesheet" href="./css/registro.css">
     <script src="face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 </head>
 <body>
     <h2>Registro de Nuevo Usuario</h2>
@@ -15,7 +16,7 @@
     <br><br>
 
     <p>Sube una foto de tu cara (bien iluminada):</p>
-    <input type="file" id="inputFoto" accept="image/*">
+    <input type="file" id="inputFoto" accept="image/*, .heic">
     <br><br>
 
     <div id="contenedor-imagen">
@@ -24,14 +25,16 @@
 
     <br><br>
 
-    <p>Asignar Grupo(s):</p>
-    <div style="display: flex; gap: 10px; justify-content: center; max-width: 300px; margin: 0 auto;">
-        <input type="text" id="inputGrupo" list="listaGrupos" placeholder="Escribe o selecciona un grupo">
-        <button type="button" id="btnAgregarGrupo" style="padding: 5px 10px; background-color: #2ecc71;">+</button>
+    <div style="max-width: 400px; margin: 0 auto; text-align: left;">
+        <p style="font-weight: bold; margin-bottom: 5px;">🔍 Buscar o crear grupos:</p>
+        <div style="position: relative;">
+            <input type="text" id="buscadorGrupos" placeholder="Escribe para buscar..." autocomplete="off">
+            <div id="resultadosBusqueda" class="dropdown-resultados"></div>
+        </div>
     </div>
-    <datalist id="listaGrupos"></datalist>
-    
-    <div id="contenedorTags"></div>
+
+    <p style="margin-top: 15px; font-size: 14px; color: #555;">Grupos seleccionados:</p>
+    <div class="caja-grupos" id="contenedor-grupos"></div>
 
     <p id="mensajeEstado">Esperando foto...</p>
     <button id="btnRegistrar" disabled>Guardar Registro</button>

@@ -11,6 +11,10 @@ let mapaCorreos = {};
 let basesDeDatosGrupos = {}; 
 let diccionarioUsuarios = {}; // NUEVO: Guarda objeto completo {correo: {nombre, grupos}}
 let comparadorFacial = null; 
+let opcionesGrupos = []; // NUEVO: Guardará la lista de grupos para el buscador
+
+// Inicializar EmailJS con la Public Key
+emailjs.init("PVySdKrUGNpDOYaCs");
 
 async function inicializarEscaner() {
     try {
@@ -73,12 +77,21 @@ async function descargarDatosFirebase() {
 
         comparadorFacial = new faceapi.FaceMatcher(rostrosConocidos, toleranciaReconocimiento);
         
-        // Renderizar el select de grupos
-        const selectHTML = document.getElementById('selectGrupo');
-        selectHTML.innerHTML = '<option value="todos">Todos los registrados</option>'; 
+        // Llenar el nuevo buscador inteligente de grupos
+        opcionesGrupos = [{ valor: "todos", texto: "Todos los registrados" }];
         for (const grupo in basesDeDatosGrupos) {
-            selectHTML.innerHTML += `<option value="${grupo}">${grupo} (${basesDeDatosGrupos[grupo].length} personas)</option>`;
+            opcionesGrupos.push({
+                valor: grupo,
+                texto: `${grupo} (${basesDeDatosGrupos[grupo].length} personas)`
+            });
         }
+        
+        // Configurar los valores por defecto
+        // Dejamos los valores en blanco para evitar envíos masivos por accidente
+        document.getElementById('buscadorGruposModal').value = "";
+        document.getElementById('selectGrupo').value = "";
+        document.getElementById('buscadorGruposModal').placeholder = "Escribe para buscar...";
+
         mensaje.innerText = "Sistema listo.";
         mensaje.style.color = "lightgreen";
     } catch (error) {
@@ -159,6 +172,19 @@ async function calcularFaltas() {
         const horaFinHTML = document.getElementById('horaFin').value;
         const reunionSeleccionada = document.getElementById('inputReunion').value.trim();
 
+        // NUEVO FRENO: Si el grupo está vacío (escribieron un typo o no eligieron de la lista)
+        if (grupoSeleccionado === "") {
+            alert("⚠️ Acción Detenida: Debes seleccionar un grupo válido de la lista desplegable.");
+            return;
+        }
+
+        if (horaInicioHTML === "" || horaFinHTML === "" || reunionSeleccionada === "") {
+            // Mostramos una alerta al usuario
+            alert("⚠️ ¡Espera! Por favor llena las horas (Desde / Hasta) y el nombre de la clase antes de generar el reporte.");
+            // El 'return' actúa como un freno de mano: detiene la función aquí mismo y no ejecuta el resto del código
+            return; 
+        }
+
         if (!horaInicioHTML || !horaFinHTML || !reunionSeleccionada) {
             alert("⚠️ Completa las horas y el nombre de la reunión.");
             return;
@@ -192,9 +218,15 @@ async function calcularFaltas() {
         listaInvitados.forEach(correoInvitado => {
             const infoUser = diccionarioUsuarios[correoInvitado] || { nombre: "Desconocido", grupos: ["Sin Grupo"] };
             const estructurado = { nombre: infoUser.nombre, correo: correoInvitado, grupos: infoUser.grupos };
-            
-            if (correosAsistentes.has(correoInvitado)) asistentes.push(estructurado);
-            else ausentes.push(estructurado);
+
+            if (correosAsistentes.has(correoInvitado)) {
+                asistentes.push(estructurado);
+            } else {
+                ausentes.push(estructurado);
+                
+                //¡Llamamos al cartero!
+                enviarCorreoFalta(estructurado.nombre, estructurado.correo, reunionSeleccionada);
+            }
         });
 
         // Dibujar el reporte en pantalla de forma bonita
@@ -219,6 +251,25 @@ async function calcularFaltas() {
     } catch (error) { console.error(error); alert("Error al procesar reporte."); }
 }
 
+async function enviarCorreoFalta(nombrePersona, correoPersona, nombreClase) {
+    // 1. Preparamos los datos exactos que pide tu plantilla de EmailJS
+    let parametros = {
+        nombre: nombrePersona,
+        correo_destino: correoPersona,
+        clase: nombreClase,
+        enlace_drive: "Enlace pendiente de añadir..." // Por ahora es texto fijo
+    };
+
+    try {
+        // 2. Le decimos al cartero que entregue el mensaje
+        // OJO: Reemplaza con tu Service ID y tu Template ID
+        let respuesta = await emailjs.send("service_s9ugx0j", "template_ayapn8q", parametros);
+        console.log("✅ Correo enviado con éxito a: " + correoPersona);
+    } catch (error) {
+        console.error("❌ Error al enviar correo a: " + correoPersona, error);
+    }
+}
+
 const modal = document.getElementById('modalAdmin');
 document.getElementById('btnAbrirAdmin').addEventListener('click', () => { modal.style.display = 'flex'; });
 document.getElementById('btnCerrarModal').addEventListener('click', () => { 
@@ -226,5 +277,68 @@ document.getElementById('btnCerrarModal').addEventListener('click', () => {
     document.getElementById('areaReporte').style.display = 'none'; // Resetea el reporte visual al cerrar
 });
 document.getElementById('btnCerrarDia').addEventListener('click', calcularFaltas);
+
+// --- MOTOR DEL BUSCADOR DE GRUPOS EN EL MODAL ---
+const buscadorGruposModal = document.getElementById('buscadorGruposModal');
+const resultadosGruposModal = document.getElementById('resultadosGruposModal');
+const selectGrupoOculto = document.getElementById('selectGrupo');
+
+// Cuando escribe
+buscadorGruposModal.addEventListener('input', () => {
+    let texto = buscadorGruposModal.value.toLowerCase().trim();
+    resultadosGruposModal.innerHTML = ""; 
+    
+    // IMPORTANTE: Al primer teclazo, borramos el valor oculto. 
+    // Así evitamos que manden correos al grupo anterior por error.
+    selectGrupoOculto.value = ""; 
+
+    let coincidencias = texto === "" 
+        ? opcionesGrupos 
+        : opcionesGrupos.filter(g => g.texto.toLowerCase().includes(texto));
+
+    // Si escribe pura basura que no existe
+    if (coincidencias.length === 0) {
+        let divError = document.createElement("div");
+        divError.className = "dropdown-item";
+        divError.style.color = "red";
+        divError.innerText = "❌ No existe este grupo";
+        resultadosGruposModal.appendChild(divError);
+    } else {
+        coincidencias.forEach(match => {
+            let div = document.createElement("div");
+            div.className = "dropdown-item";
+            div.innerText = match.texto; 
+            
+            // Solo si da clic en una opción válida, se guarda el valor real
+            div.addEventListener("click", () => {
+                buscadorGruposModal.value = match.texto; 
+                selectGrupoOculto.value = match.valor;  
+                resultadosGruposModal.style.display = "none";
+            });
+            resultadosGruposModal.appendChild(div);
+        });
+    }
+
+    resultadosGruposModal.style.display = "block";
+});
+
+// UX MEJORADA: Al dar clic, seleccionamos todo el texto para que al teclear se borre lo anterior
+buscadorGruposModal.addEventListener('focus', () => {
+    buscadorGruposModal.select(); 
+    buscadorGruposModal.dispatchEvent(new Event('input')); 
+});
+
+// Ocultar si da clic fuera del buscador y limpiar typos
+document.addEventListener("click", (e) => {
+    if (e.target !== buscadorGruposModal && e.target !== resultadosGruposModal) {
+        resultadosGruposModal.style.display = "none";
+        
+        // Si dieron clic fuera y no hay un grupo oficial seleccionado, borramos su texto inventado
+        if (selectGrupoOculto.value === "") {
+            buscadorGruposModal.value = "";
+        }
+    }
+});
+
 
 inicializarEscaner();

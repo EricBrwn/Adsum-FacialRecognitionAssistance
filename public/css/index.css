@@ -138,3 +138,51 @@ canvas { position: absolute; top: 0; left: 0; }
 #areaReporte ul { padding-left: 20px; margin: 5px 0 15px 0; }
 #areaReporte li { margin-bottom: 4px; }
 #inputReunion { width: 100%; padding: 12px 5px; font-size: 16px; border-radius: 8px; text-align: center; margin-bottom: 25px; border: 2px solid #9b59b6; background: #fff; color: #000; }
+
+/* --- Buscador Inteligente Modal --- */
+#buscadorGruposModal {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 2px solid #555;
+    background-color: #ffffff;
+    color: #333;
+    font-size: 15px;
+    text-align: center;
+    box-sizing: border-box;
+    outline: none;
+    cursor: text;
+}
+
+#buscadorGruposModal:focus {
+    border-color: #fbc531;
+}
+
+.dropdown-resultados {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 2px solid #555;
+    border-radius: 0 0 8px 8px;
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 10000;
+    display: none;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+}
+
+.dropdown-item {
+    padding: 10px 15px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+    text-align: left;
+    color: #333;
+}
+
+.dropdown-item:hover {
+    background-color: #f1f2f6;
+    color: #000;
+}

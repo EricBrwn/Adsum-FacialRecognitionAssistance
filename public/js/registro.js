@@ -1,19 +1,20 @@
 import { db } from "./firebase-config.js";
 import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
+// Elementos de la interfaz 
 const mensaje = document.getElementById('mensajeEstado');
 const imagenPrevia = document.getElementById('imagenPrevia');
 const btnRegistrar = document.getElementById('btnRegistrar');
 const inputFoto = document.getElementById('inputFoto');
 const inputCorreo = document.getElementById('correoUsuario');
 
-const inputGrupo = document.getElementById('inputGrupo');
-const btnAgregarGrupo = document.getElementById('btnAgregarGrupo');
-const contenedorTags = document.getElementById('contenedorTags');
-const datalistGrupos = document.getElementById('listaGrupos');
+// Elementos del Buscador de grupos
+const buscadorGrupos = document.getElementById('buscadorGrupos');
+const resultadosBusqueda = document.getElementById('resultadosBusqueda');
+const contenedorGrupos = document.getElementById('contenedor-grupos');
 
+let todosLosGruposMemoria = []; 
 let descriptorFacial = null; 
-let gruposSeleccionados = new Set(); // Evita que se repitan grupos en la lista local
 
 async function iniciar() {
     try {
@@ -25,7 +26,7 @@ async function iniciar() {
         ]);
         
         mensaje.innerText = "2/2 Sincronizando grupos existentes...";
-        await cargarGruposAutocompletado();
+        await cargarGruposDesdeFirebase();
 
         mensaje.innerText = "Sistema listo. Llena tus datos.";
         mensaje.style.color = "blue";
@@ -36,64 +37,140 @@ async function iniciar() {
     }
 }
 
-// Busca todos los grupos que ya existen en la base de datos para sugerirlos
-async function cargarGruposAutocompletado() {
+// 1. Escanea Firebase pero NO dibuja nada, solo los guarda en memoria
+async function cargarGruposDesdeFirebase() {
     const querySnapshot = await getDocs(collection(db, "Users"));
     const gruposExistentes = new Set();
     
     querySnapshot.forEach(doc => {
         const datos = doc.data();
         if (datos.grupos && Array.isArray(datos.grupos)) {
-            datos.grupos.forEach(g => gruposExistentes.add(g));
+            datos.grupos.forEach(g => {
+                if (g !== "Sin Grupo") gruposExistentes.add(g);
+            });
         }
     });
-
-    datalistGrupos.innerHTML = "";
-    gruposExistentes.forEach(grupo => {
-        datalistGrupos.innerHTML += `<option value="${grupo}"></option>`;
-    });
+    todosLosGruposMemoria = Array.from(gruposExistentes); 
 }
 
-function renderizarTags() {
-    contenedorTags.innerHTML = "";
-    gruposSeleccionados.forEach(grupo => {
-        const tag = document.createElement('span');
-        tag.className = 'tag-grupo';
-        tag.innerHTML = `${grupo} <button type="button" class="btn-borrar-tag" data-grupo="${grupo}">×</button>`;
-        contenedorTags.appendChild(tag);
-    });
+// 2. Función que convierte un texto en una píldora seleccionada
+function agregarCheckboxGrupo(nombreGrupo) {
+    let nombreLimpio = nombreGrupo.trim();
+    if (nombreLimpio === "") return;
+
+    const yaExiste = Array.from(contenedorGrupos.querySelectorAll('input')).some(i => i.value.toLowerCase() === nombreLimpio.toLowerCase());
+    
+    if (!yaExiste) {
+        let label = document.createElement("label");
+        label.className = "grupo-opcion";
+        
+        let checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = nombreLimpio;
+        checkbox.checked = true; // ¡SIEMPRE nace con palomita!
+        
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(" " + nombreLimpio));
+        contenedorGrupos.appendChild(label);
+    }
+
+    buscadorGrupos.value = "";
+    resultadosBusqueda.style.display = "none";
 }
 
-// Agregar grupo al hacer click en + o presionar Enter
-btnAgregarGrupo.addEventListener('click', () => {
-    const valor = inputGrupo.value.trim();
-    if (valor && !gruposSeleccionados.has(valor)) {
-        gruposSeleccionados.add(valor);
-        renderizarTags();
-        inputGrupo.value = "";
+// 3. El motor del buscador al escribir
+buscadorGrupos.addEventListener('input', () => {
+    let texto = buscadorGrupos.value.toLowerCase().trim();
+    resultadosBusqueda.innerHTML = ""; 
+
+    if (texto === "") {
+        resultadosBusqueda.style.display = "none";
+        return;
     }
-});
-inputGrupo.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); btnAgregarGrupo.click(); }
+
+    let coincidencias = todosLosGruposMemoria.filter(g => g.toLowerCase().includes(texto));
+
+    coincidencias.forEach(match => {
+        let div = document.createElement("div");
+        div.className = "dropdown-item";
+        div.innerText = match;
+        div.addEventListener("click", () => agregarCheckboxGrupo(match));
+        resultadosBusqueda.appendChild(div);
+    });
+
+    let divCrear = document.createElement("div");
+    divCrear.className = "dropdown-item";
+    divCrear.style.fontWeight = "bold";
+    divCrear.style.color = "#007bff";
+    divCrear.innerText = `+ Crear y seleccionar "${buscadorGrupos.value}"`;
+    divCrear.addEventListener("click", () => {
+        agregarCheckboxGrupo(buscadorGrupos.value);
+        if (!todosLosGruposMemoria.includes(buscadorGrupos.value)) {
+            todosLosGruposMemoria.push(buscadorGrupos.value); 
+        }
+    });
+    resultadosBusqueda.appendChild(divCrear);
+
+    resultadosBusqueda.style.display = "block"; 
 });
 
-// Borrar grupo al hacer click en la X
-contenedorTags.addEventListener('click', (e) => {
-    if (e.target.classList.contains('btn-borrar-tag')) {
-        const grupoABorrar = e.target.getAttribute('data-grupo');
-        gruposSeleccionados.delete(grupoABorrar);
-        renderizarTags();
+// 4. "A prueba de tontos": Si presiona Enter, se crea/selecciona automáticamente
+buscadorGrupos.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        let texto = buscadorGrupos.value.trim();
+        if (texto !== "") {
+            agregarCheckboxGrupo(texto);
+            if (!todosLosGruposMemoria.includes(texto)) todosLosGruposMemoria.push(texto);
+        }
     }
 });
 
+// 5. Ocultar el menú si da clic en cualquier otro lado de la pantalla
+document.addEventListener("click", (e) => {
+    if (e.target !== buscadorGrupos && e.target !== resultadosBusqueda) {
+        resultadosBusqueda.style.display = "none";
+    }
+});
+
+// --- EL LECTOR DE ROSTROS (AHORA CON SOPORTE PARA IPHONE/HEIC) ---
 inputFoto.addEventListener('change', async () => {
-    const archivo = inputFoto.files[0];
+    let archivo = inputFoto.files[0];
     if (!archivo) return;
+    
+    btnRegistrar.disabled = true;
+
+    // Detectamos si es una foto de iPhone (.heic)
+    let nombreArchivo = archivo.name.toLowerCase();
+    if (nombreArchivo.endsWith('.heic') || archivo.type === 'image/heic') {
+        mensaje.innerText = "Convirtiendo formato de iPhone (esto toma un par de segundos)...";
+        mensaje.style.color = "orange";
+        
+        try {
+            // Convertimos la imagen a JPEG mágicamente en el navegador
+            const blobConvertido = await heic2any({
+                blob: archivo,
+                toType: "image/jpeg",
+                quality: 0.8 // Buena calidad, procesamiento rápido
+            });
+            
+            // heic2any a veces devuelve un arreglo, nos aseguramos de tomar el archivo correcto
+            archivo = Array.isArray(blobConvertido) ? blobConvertido[0] : blobConvertido;
+        } catch (error) {
+            console.error("Error al convertir HEIC:", error);
+            mensaje.innerText = "❌ Error al procesar la imagen de iPhone.";
+            mensaje.style.color = "red";
+            return;
+        }
+    }
+
+    // Ahora sí, creamos la URL con la imagen (sea normal o ya convertida)
     const imagenUrl = URL.createObjectURL(archivo);
     imagenPrevia.src = imagenUrl;
     mensaje.innerText = "Analizando rostro...";
-    btnRegistrar.disabled = true;
+    mensaje.style.color = "blue"; 
 
+    // El análisis continúa normal
     imagenPrevia.onload = async () => {
         const deteccion = await faceapi.detectSingleFace(imagenPrevia).withFaceLandmarks().withFaceDescriptor();
         if (deteccion) {
@@ -106,13 +183,31 @@ inputFoto.addEventListener('change', async () => {
             mensaje.style.color = "red";
         }
     };
+
+    imagenPrevia.onerror = () => {
+        mensaje.innerText = "❌ Error: No se pudo mostrar la imagen.";
+        mensaje.style.color = "red";
+        btnRegistrar.disabled = true;
+    };
 });
 
+// --- GUARDAR EN FIREBASE ---
 btnRegistrar.addEventListener('click', async () => {
     const nombre = document.getElementById('nombreUsuario').value.trim();
     const correo = inputCorreo.value.trim();
 
-    if (!nombre || !correo) { alert("Llena nombre y correo."); return; }
+    if (!nombre || !correo) { alert("Por favor, llena nombre y correo."); return; }
+
+    let checkboxesSeleccionados = document.querySelectorAll('#contenedor-grupos input[type="checkbox"]:checked');
+    let gruposElegidos = [];
+    checkboxesSeleccionados.forEach((casilla) => {
+        gruposElegidos.push(casilla.value);
+    });
+
+    if (gruposElegidos.length === 0) {
+        alert("⚠️ ¡Acción Detenida! Debes seleccionar al menos un grupo o escribir uno nuevo antes de guardar el usuario.");
+        return;
+    }
 
     btnRegistrar.innerText = "Guardando...";
     btnRegistrar.disabled = true;
@@ -123,12 +218,11 @@ btnRegistrar.addEventListener('click', async () => {
             email: correo,
             descriptor: Array.from(descriptorFacial), 
             fechaRegistro: new Date().toISOString(),
-            // Guardamos el array de grupos (si no eligió ninguno, se va a "Sin Grupo")
-            grupos: gruposSeleccionados.size > 0 ? Array.from(gruposSeleccionados) : ["Sin Grupo"]
+            grupos: gruposElegidos 
         });
 
         alert("¡Registro Exitoso!");
-        location.reload(); // Recargamos para limpiar y actualizar el autocompletado
+        location.reload(); 
     } catch (error) {
         console.error(error);
         alert("Error al guardar.");
