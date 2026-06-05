@@ -13,11 +13,22 @@
 
     <input type="text" id="userName" placeholder="Enter their FULL NAME">
     <br>
-    <input type="email" id="userEmail" placeholder="youremail@example.com">
+    <input type="email" id="userEmail" placeholder="theiremail@example.com">
     <br><br>
 
-    <p>Upload a photo of your face (with good lighting):</p>
-    <input type="file" id="photoInput" accept="image/*, .heic">
+    <p>Upload a photo of their face (with good lighting):</p>
+    <div class="custom-file-upload">
+        <!-- El botón falso que sí podemos diseñar y traducir -->
+        <label for="photoInput" class="upload-btn">
+            📁 Choose File
+        </label>
+        
+        <!-- El botón real del navegador (lo vamos a ocultar con CSS) -->
+        <input type="file" id="photoInput" accept="image/*">
+        
+        <!-- El texto de "Ningún archivo seleccionado" -->
+        <span id="fileNameDisplay">No file chosen</span>
+    </div>
     <br><br>
 
     <div id="imageContainer">

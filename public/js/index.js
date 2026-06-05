@@ -1,5 +1,5 @@
 import { db } from "./firebase-config.js";
-import { collection, getDocs, addDoc, query, where, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { collection, getDocs, addDoc, query, where, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
 const video = document.getElementById('camera');
 const scannerMessage = document.getElementById('scannerMessage');
@@ -12,6 +12,7 @@ let groupDatabases = {};
 let userDictionary = {}; // Saves complete object {email: {name, groups}}
 let faceMatcher = null; 
 let groupOptions = []; // Will store the list of groups for the searcher
+let currentTeacherName = "Teacher";
 
 // Initialize EmailJS with your Public Key
 emailjs.init("PVySdKrUGNpDOYaCs");
@@ -147,11 +148,11 @@ async function startRecognition() {
                 const box = detection.detection.box; 
 
                 if (bestMatch.label !== 'unknown') {
-                    scannerMessage.innerText = `ACCESS GRANTED: WELCOME ${bestMatch.label.toUpperCase()}!`;
+                    scannerMessage.innerText = `DETECTED: ${bestMatch.label.toUpperCase()}`;
                     scannerMessage.style.color = "lightgreen";
                     logAccess(bestMatch.label);
                 } else {
-                    scannerMessage.innerText = "ACCESS DENIED: Unregistered person.";
+                    scannerMessage.innerText = "DETECTED: Unregistered person.";
                     scannerMessage.style.color = "red";
                 }   
                 new faceapi.draw.DrawBox(box, { 
@@ -241,18 +242,26 @@ async function calculateAbsences() {
 
         reportArea.innerHTML = html;
 
+
+        // --- NUEVO: Enviar resumen al profesor ---
+        const emailInput = document.getElementById('teacherEmailInput').value.trim();
+        if (emailInput && selectedGroup !== "all") {
+            sendTeacherSummaryEmail(emailInput, currentTeacherName, selectedGroup, selectedSession, attendees, absentees);
+        }
+
     } catch (error) { 
         console.error("Error en el reporte:", error); 
         alert("Error processing report."); 
     }
 }
 
+//EMAILS
 async function sendAbsenceEmail(personName, personEmail, sessionName) {
     // 1. Prepare exact data payload matching the new EmailJS template
     let parameters = {
         name: personName,
         target_email: personEmail,
-        class_name: sessionName,
+        session_name: sessionName,
         drive_link: "Link pending addition..." 
     };
 
@@ -262,6 +271,29 @@ async function sendAbsenceEmail(personName, personEmail, sessionName) {
         console.log("✅ Email successfully sent to: " + personEmail);
     } catch (error) {
         console.error("❌ Error sending email to: " + personEmail, error);
+    }
+}
+
+async function sendTeacherSummaryEmail(teacherEmail, teacherName, group, session, attendees, absentees) {
+    // Convertimos los arreglos en texto legible
+    const attendeesText = attendees.length > 0 ? attendees.map(a => a.name).join(", ") : "Nadie asistió.";
+    const absenteesText = absentees.length > 0 ? absentees.map(a => a.name).join(", ") : "Asistencia perfecta.";
+
+    let parameters = {
+        teacher_name: teacherName,
+        teacher_email: teacherEmail,
+        group_name: group,
+        session_name: session,
+        attendees_list: attendeesText,
+        absentees_list: absenteesText
+    };
+
+    try {
+        // OJO: Tendrás que cambiar "TEMPLATE_MAESTROS" por el ID real de tu nueva plantilla
+        await emailjs.send("service_s9ugx0j", "template_49u2dbi", parameters);
+        console.log("✅ Reporte resumen enviado al profesor: " + teacherEmail);
+    } catch (error) {
+        console.error("❌ Error enviando el resumen al profesor.", error);
     }
 }
 
@@ -333,5 +365,56 @@ document.addEventListener("click", (e) => {
         }
     }
 });
+
+async function loadTeacherGroups() {
+    const emailInput = document.getElementById('teacherEmailInput').value.trim();
+    
+    if (!emailInput) {
+        alert("⚠️ Please enter your teacher email first.");
+        return;
+    }
+
+    try {
+        const teacherRef = doc(db, "Teachers", emailInput);
+        const teacherSnap = await getDoc(teacherRef); // ¡Aquí estaba el error antes!
+
+        if (teacherSnap.exists()) {
+            const teacherData = teacherSnap.data();
+            currentTeacherName = teacherData.name;
+            const teacherGroups = teacherData.groups || [];
+
+            if (teacherGroups.length > 0) {
+                // 1. Limpiamos las opciones globales de tu buscador inteligente
+                groupOptions = []; 
+                
+                // 2. Agregamos SOLAMENTE los grupos de este profesor
+                teacherGroups.forEach(group => {
+                    // Calculamos cuántos alumnos hay basándonos en tu base de datos descargada
+                    const count = groupDatabases[group] ? groupDatabases[group].length : 0;
+                    groupOptions.push({
+                        value: group,
+                        text: `${group} (${count} people)`
+                    });
+                });
+
+                // 3. Limpiamos visualmente el cuadro de búsqueda por si había algo escrito
+                document.getElementById('modalGroupSearch').value = "";
+                document.getElementById('hiddenGroupSelect').value = "";
+                
+                alert(`✅ Welcome ${teacherData.name}! Your groups have been loaded.`);
+            } else {
+                alert("⚠️ No groups assigned to this teacher yet.");
+            }
+        } else {
+            alert("❌ Teacher not found in the database. Please check the email.");
+        }
+    } catch (error) {
+        console.error("Error loading teacher groups:", error);
+        alert("Error connecting to the database.");
+    }
+}
+
+// Conectamos el botón nuevo con la función
+document.getElementById('loadGroupsBtn').addEventListener('click', loadTeacherGroups);
 
 initializeScanner();

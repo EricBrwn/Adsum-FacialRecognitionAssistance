@@ -162,3 +162,36 @@ img {
     font-weight: bold;
     opacity: 0.9;
 }
+
+
+/* Oculta el botón original del navegador */
+input[type="file"] {
+    display: none;
+}
+
+/* Diseño del nuevo botón en inglés */
+.upload-btn {
+    display: inline-block;
+    padding: 8px 15px;
+    background-color: #34495e;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+    border: 1px solid #2c3e50;
+}
+
+.upload-btn:hover {
+    background-color: #fbc531;
+    color: #111;
+    border-color: #fbc531;
+}
+
+/* Estilo para el texto de "No file chosen" */
+#fileNameDisplay {
+    margin-left: 10px;
+    font-size: 14px;
+    color: #666; /* Gris oscuro para que se lea bien en tu fondo blanco */
+    font-style: italic;
+}

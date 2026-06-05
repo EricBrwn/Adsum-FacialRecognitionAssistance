@@ -1,5 +1,5 @@
 import { db } from "./firebase-config.js";
-import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { collection, getDocs, doc, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
 // UI Elements
 const statusMessage = document.getElementById('statusMessage');
@@ -222,8 +222,8 @@ registerBtn.addEventListener('click', async () => {
             email: email,
             descriptor: Array.from(faceDescriptor), 
             registrationDate: new Date().toISOString(),
-            groups: chosenGroups 
-        });
+            groups: arrayUnion(...chosenGroups) 
+        }, {merge: true }); // Merge: true evita que se borre lo que ya existía
 
         alert("Registration Successful!");
         location.reload(); 
@@ -231,6 +231,18 @@ registerBtn.addEventListener('click', async () => {
         console.error(error);
         alert("Error saving user.");
         registerBtn.disabled = false;
+    }
+});
+
+// Cambiar el texto cuando se selecciona un archivo
+document.getElementById('photoInput').addEventListener('change', function(e) {
+    const fileNameSpan = document.getElementById('fileNameDisplay');
+    if (e.target.files.length > 0) {
+        // Muestra el nombre del archivo seleccionado
+        fileNameSpan.textContent = e.target.files[0].name;
+    } else {
+        // Si cancelan, vuelve a decir que no hay archivo
+        fileNameSpan.textContent = "No file chosen";
     }
 });
 
