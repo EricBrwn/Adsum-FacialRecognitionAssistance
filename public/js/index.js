@@ -15,6 +15,8 @@ let faceMatcher = null;
 let groupOptions = []; // Will store the list of groups for the searcher
 let currentTeacherName = "Teacher";
 
+let currentStream = null;
+
 // Initialize EmailJS with your Public Key
 emailjs.init("PVySdKrUGNpDOYaCs");
 
@@ -26,7 +28,9 @@ async function initializeScanner() {
         await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
         
         scannerMessage.innerText = "2/3 Turning on camera...";
-        await turnOnCamera(); 
+        await populateCameraList(); // Buscamos todas las cámaras conectadas
+        const initialCameraId = document.getElementById('cameraSelect').value;
+        await turnOnCamera(initialCameraId); // Encendemos la primera que encontró
 
         scannerMessage.innerText = "3/3 Synchronizing Database...";
         await downloadFirebaseData();
@@ -40,13 +44,52 @@ async function initializeScanner() {
     startRecognition();
 }
 
-async function turnOnCamera() {
+async function populateCameraList() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
+        // Pedimos permiso general primero; si no, Chrome oculta los nombres reales de las cámaras
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        const cameraSelect = document.getElementById('cameraSelect');
+        
+        cameraSelect.innerHTML = ''; // Limpiamos opciones viejas
+        
+        videoDevices.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            // Si Chrome no nos da el nombre, le ponemos un nombre genérico
+            option.text = device.label || `Camera ${cameraSelect.length + 1}`;
+            cameraSelect.appendChild(option);
+        });
+
+        // Cuando cambies de opción en el menú, se enciende la nueva cámara
+        cameraSelect.addEventListener('change', () => {
+            turnOnCamera(cameraSelect.value);
+        });
+
     } catch (error) {
-        alert("⛔ Could not access the camera.");
-        throw error; 
+        console.error("Error enumerating devices:", error);
+    }
+}
+
+async function turnOnCamera(deviceId = null) {
+    try {
+        // Si hay una cámara encendida, la apagamos antes de cambiar
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+        }
+
+        // Le decimos a Chrome qué cámara exacta queremos
+        const constraints = {
+            video: deviceId ? { deviceId: { exact: deviceId } } : true
+        };
+
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+    } catch (error) {
+        alert("⛔ Could not access the selected camera.");
+        console.error(error);
     }
 }
 
