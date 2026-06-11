@@ -5,6 +5,7 @@ const video = document.getElementById('camera');
 const scannerMessage = document.getElementById('scannerMessage');
 
 const recognitionTolerance = 0.45; // Adjust this value to be more or less strict on facial recognition
+const scannerTimeInterval = 700; // Time in ms between each scan (lower is more real-time but can cause performance issues on slower devices)
 
 let knownFaces = []; 
 let emailMap = {}; 
@@ -160,7 +161,7 @@ async function startRecognition() {
                     boxColor: bestMatch.label === 'unknown' ? 'red' : 'green' 
                 }).draw(canvas);
             });
-        }, 200);
+        }, scannerTimeInterval);
     };
 
     if (video.readyState >= 3) runDetection();
