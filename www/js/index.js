@@ -23,9 +23,9 @@ emailjs.init("PVySdKrUGNpDOYaCs");
 async function initializeScanner() {
     try {
         scannerMessage.innerText = "1/3 Loading AI...";
-        await faceapi.nets.ssdMobilenetv1.loadFromUri('./models');
-        await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-        await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+        await faceapi.nets.ssdMobilenetv1.loadFromUri(CONFIG.MODEL_PATH);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(CONFIG.MODEL_PATH);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(CONFIG.MODEL_PATH);
         
         scannerMessage.innerText = "2/3 Turning on camera...";
         await populateCameraList(); // Buscamos todas las cámaras conectadas
@@ -37,7 +37,7 @@ async function initializeScanner() {
         await loadSessionAutocomplete();
         
     } catch (error) {
-        console.error(error);
+        console.error("Error loading the AI:", error);
         scannerMessage.innerText = "Error: " + (error.message || error); 
         scannerMessage.style.color = "red";
     }
@@ -458,19 +458,6 @@ async function loadTeacherGroups() {
         console.error("Error loading teacher groups:", error);
         alert("Error connecting to the database.");
     }
-}
-
-// --- BOTÓN SECRETO PARA ADMIN ---
-const secretBtn = document.getElementById('secretAdminBtn');
-if(secretBtn) {
-    secretBtn.addEventListener('dblclick', () => {
-        const password = prompt("🔐 Enter Developer Password:");
-        if (password === "adsum") { // Pon la contraseña que tú quieras
-            window.location.replace('admin.html');
-        } else if (password !== null) {
-            alert("❌ Access Denied");
-        }
-    });
 }
 
 // Conectamos el botón nuevo con la función

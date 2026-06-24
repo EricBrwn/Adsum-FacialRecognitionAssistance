@@ -214,15 +214,26 @@ canvas { position: absolute; top: 0; left: 0; }
 /* --- Marca de Agua Adsum / EricBrwn --- */
 .watermark {
     position: fixed;
-    bottom: 15px;
-    right: 20px;
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.4); /* Color blanco casi transparente */
-    font-family: 'Courier New', Courier, monospace; /* Estilo hacker/código */
-    pointer-events: none; /* Evita que estorbe si haces clic sobre ella */
-    z-index: 9999; /* Asegura que siempre esté por encima de todo */
-    letter-spacing: 1px;
-    transition: color 0.3s ease;
+    bottom: 12px;
+    right: 15px;
+    font-size: 12px;
+    color: #888888; /* Gris claro para el texto normal */
+    font-family: Arial, sans-serif;
+    z-index: 1000;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* El texto "Adsum" resaltará en tu azul tecnológico */
+.watermark strong {
+    color: #00bcd4; 
+    font-weight: bold;
+}
+
+/* Tu nombre resaltará en blanco */
+.watermark span {
+    color: #ffffff;
+    font-weight: 500;
 }
 
 /* Asegura que el cuerpo no tenga barras de desplazamiento */
@@ -236,11 +247,21 @@ body {
     align-items: center; 
 }
 
-/* Hacemos que el video sea "elástico" */
-#cameraContainer { 
-    width: 100%; 
-    max-width: 600px; /* Ancho máximo */
-    margin-top: 10px;
+/* Esto hace que el cuadro verde no bloquee tus clics */
+canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none !important; /* REGLA DE ORO: Ignora los clics */
+}
+
+/* Asegúrate de que el contenedor de la cámara tenga position relative */
+#cameraContainer {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: center;
 }
 
 video { 

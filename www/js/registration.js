@@ -20,10 +20,10 @@ async function initialize() {
     try {
         statusMessage.innerText = "1/2 Loading AI engine...";
         await Promise.all([
-            faceapi.nets.ssdMobilenetv1.loadFromUri('./models'),
-            faceapi.nets.faceLandmark68Net.loadFromUri('./models'),
-            faceapi.nets.faceRecognitionNet.loadFromUri('./models')
-        ]);
+            faceapi.nets.ssdMobilenetv1.loadFromUri(CONFIG.MODEL_PATH),
+            faceapi.nets.faceLandmark68Net.loadFromUri(CONFIG.MODEL_PATH),
+            faceapi.nets.faceRecognitionNet.loadFromUri(CONFIG.MODEL_PATH)
+            ]);
         
         statusMessage.innerText = "2/2 Synchronizing existing groups...";
         await loadGroupsFromFirebase();

@@ -7,13 +7,9 @@
     <link rel="stylesheet" href="./css/registration.css">
     <script src="face-api.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script src="js/shared.js"></script>
 </head>
 <body>
-
-    <div style="background: #1a1c20; padding: 12px; text-align: center; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; width: 90%; max-width: 600px;">
-        <span onclick="window.location.href='./index.html'" style="color: #aaa; margin: 0 15px; font-weight: bold; font-size: 16px; cursor: pointer;">📷 Scanner</span>
-        <span onclick="window.location.href='./registration.html'" style="color: #00bcd4; margin: 0 15px; font-size: 16px; cursor: pointer;">📝 Registration</span>
-    </div>
 
     <h2>New User Registration</h2>
 
@@ -59,7 +55,7 @@
 
     <script type="module" src="./js/registration.js"></script>
 
-    <div class="watermark">
+    <div class="watermark" id="secretAdminBtnReg" style="pointer-events: auto; cursor: pointer;">
         Project <strong>Adsum</strong> | Developed by <span>EricBrwn</span>
     </div>
 </body>

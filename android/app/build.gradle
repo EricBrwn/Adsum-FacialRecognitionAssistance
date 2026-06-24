@@ -1,6 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
+    androidResources {
+        noCompress 'bin', 'json'
+    }
+
     namespace = "com.ericbrwn.adsum"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {

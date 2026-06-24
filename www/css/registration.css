@@ -1,12 +1,68 @@
+/* Forzar que todo quepa en la pantalla de la tablet */
 body {
+    margin: 0;
+    padding: 10px;
+    height: 100vh;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    text-align: center;
+    justify-content: flex-start;
+    overflow: hidden; /* Prohibido el scroll */
+    font-family: Arial, sans-serif;
+    background-color: #121212;
+    color: white;
+}
+
+h2 {
+    margin: 5px 0;
+    font-size: 1.5rem;
+}
+
+/* Contenedor de los inputs en fila o bloque compacto */
+.input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     width: 100%;
-    margin: 0;
-    overflow-x: hidden;
+    max-width: 400px;
+    margin-bottom: 10px;
+}
+
+input[type="text"], input[type="email"] {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: #222;
+    color: white;
+}
+
+/* El recuadro azul de la foto (Previsualización) */
+#previewContainer {
+    width: 180px;
+    height: 140px; /* Reducimos el tamaño para ahorrar pantalla */
+    border: 2px dashed #00bcd4;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 10px 0;
+    overflow: hidden;
+}
+
+#previewImage {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;
+}
+
+/* Ajustes del botón de guardado */
+button {
+    padding: 10px 20px;
+    margin-top: 5px;
+    border-radius: 6px;
 }
 
 #imageContainer { 
@@ -147,25 +203,35 @@ img {
 /* --- Marca de Agua Adsum / EricBrwn (Versión Fondo Claro) --- */
 .watermark {
     position: fixed;
-    bottom: 15px;
-    right: 20px;
-    font-size: 13px;
-    color: rgba(0, 0, 0, 0.4); /* Gris oscuro semitransparente para que contraste con el blanco */
-    font-family: 'Courier New', Courier, monospace;
-    pointer-events: none;
-    z-index: 9999;
-    letter-spacing: 1px;
-    transition: color 0.3s ease;
+    bottom: 12px;
+    right: 15px;
+    font-size: 12px;
+    color: #888888; /* Gris claro para el texto normal */
+    font-family: Arial, sans-serif;
+    z-index: 1000;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* El texto "Adsum" resaltará en tu azul tecnológico */
+.watermark strong {
+    color: #00bcd4; 
+    font-weight: bold;
+}
+
+/* Tu nombre resaltará en blanco */
+.watermark span {
+    color: #ffffff;
+    font-weight: 500;
 }
 
 .watermark:hover {
-    color: rgba(0, 0, 0, 0.8); /* Se vuelve casi negro al pasar el mouse */
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .watermark span {
-    color: #2c3e50; /* Un azul oscuro/gris muy elegante para tu firma artística */
-    font-weight: bold;
-    opacity: 0.9;
+    color: #fbc531;
+    opacity: 0.7;
 }
 
 
@@ -199,4 +265,21 @@ input[type="file"] {
     font-size: 14px;
     color: #666; /* Gris oscuro para que se lea bien en tu fondo blanco */
     font-style: italic;
+}
+
+/* Esto hace que el cuadro verde no bloquee tus clics */
+canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none !important; /* REGLA DE ORO: Ignora los clics */
+}
+
+/* Asegúrate de que el contenedor de la cámara tenga position relative */
+#cameraContainer {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: center;
 }
