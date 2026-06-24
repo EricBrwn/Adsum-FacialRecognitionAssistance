@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Facial Recognition Registration</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>">
+    <link rel="stylesheet" href="./css/registration.css">
+    <script src="face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+</head>
+<body>
+
+    <div style="background: #1a1c20; padding: 12px; text-align: center; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; width: 90%; max-width: 600px;">
+        <span onclick="window.location.href='./index.html'" style="color: #aaa; margin: 0 15px; font-weight: bold; font-size: 16px; cursor: pointer;">📷 Scanner</span>
+        <span onclick="window.location.href='./registration.html'" style="color: #00bcd4; margin: 0 15px; font-size: 16px; cursor: pointer;">📝 Registration</span>
+    </div>
+
+    <h2>New User Registration</h2>
+
+    <input type="text" id="userName" placeholder="Enter their FULL NAME">
+    <br>
+    <input type="email" id="userEmail" placeholder="theiremail@example.com">
+    <br><br>
+
+    <p>Upload a photo of their face (with good lighting):</p>
+    <div class="custom-file-upload">
+        <!-- El botón falso que sí podemos diseñar y traducir -->
+        <label for="photoInput" class="upload-btn">
+            📁 Choose File
+        </label>
+        
+        <!-- El botón real del navegador (lo vamos a ocultar con CSS) -->
+        <input type="file" id="photoInput" accept="image/*">
+        
+        <!-- El texto de "Ningún archivo seleccionado" -->
+        <span id="fileNameDisplay">No file chosen</span>
+    </div>
+    <br><br>
+
+    <div id="imageContainer">
+        <img id="previewImage" src="" alt="">
+    </div>
+
+    <br><br>
+
+    <div style="max-width: 400px; margin: 0 auto; text-align: left;">
+        <p style="font-weight: bold; margin-bottom: 5px;">🔍 Search for or create groups: </p>
+        <div style="position: relative;">
+            <input type="text" id="groupSearch" placeholder="Type to Search..." autocomplete="off">
+            <div id="searchResults" class="dropdown-results"></div>
+        </div>
+    </div>
+
+    <p style="margin-top: 15px; font-size: 14px; color: #555;">Selected Groups:</p>
+    <div class="groups-box" id="groupsContainer"></div>
+
+    <p id="statusMessage">Waiting for photo...</p>
+    <button id="registerBtn" disabled>Save Registration</button>
+
+    <script type="module" src="./js/registration.js"></script>
+
+    <div class="watermark">
+        Project <strong>Adsum</strong> | Developed by <span>EricBrwn</span>
+    </div>
+</body>
+</html>

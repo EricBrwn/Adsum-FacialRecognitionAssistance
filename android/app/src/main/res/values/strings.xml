@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Adsum</string>
+    <string name="title_activity_main">Adsum</string>
+    <string name="package_name">com.ericbrwn.adsum</string>
+    <string name="custom_url_scheme">com.ericbrwn.adsum</string>
+</resources>
