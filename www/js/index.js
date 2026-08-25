@@ -124,8 +124,15 @@ async function downloadFirebaseData() {
             knownFaces.push(labeledFace);
         });
 
-        faceMatcher = new faceapi.FaceMatcher(knownFaces, recognitionTolerance);
-        
+        // Validar que existan rostros antes de crear el reconocedor
+        if (knownFaces.length > 0) {
+            faceMatcher = new faceapi.FaceMatcher(knownFaces, recognitionTolerance);
+        } else {
+            console.warn("No hay rostros registrados en la base de datos.");
+            scannerMessage.innerText = "No users found in database.";
+            scannerMessage.style.color = "orange";
+        }
+                    
         // Fill the smart group searcher
         groupOptions = [{ value: "all", text: "All registered users" }];
         for (const group in groupDatabases) {

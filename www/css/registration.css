@@ -55,7 +55,8 @@ input[type="text"], input[type="email"] {
 #previewImage {
     max-width: 100%;
     max-height: 100%;
-    object-fit: cover;
+    object-fit: contain; /* 'contain' muestra toda la foto sin recortarla */
+    border-radius: 4px;
 }
 
 /* Ajustes del botón de guardado */
