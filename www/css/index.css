@@ -5,6 +5,11 @@ video { border: 3px solid #4CAF50; border-radius: 10px; }
 #cameraContainer {
     position: relative;
     display: inline-block;
+    width: 100%;
+    max-width: 600px;
+    /* display: flex; */
+    justify-content: center;
+
 }
 
 /* El canvas debe flotar de forma absoluta sobre el video */
@@ -14,6 +19,7 @@ canvas {
     left: 0;
     width: 100%;
     height: 100%;
+    pointer-events: none !important; /* REGLA DE ORO: Ignora los clics */
 }
 
 /* Button and Modal Design */
@@ -258,23 +264,6 @@ body {
     display: flex; 
     flex-direction: column; 
     align-items: center; 
-}
-
-/* Esto hace que el cuadro verde no bloquee tus clics */
-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none !important; /* REGLA DE ORO: Ignora los clics */
-}
-
-/* Asegúrate de que el contenedor de la cámara tenga position relative */
-#cameraContainer {
-    position: relative;
-    width: 100%;
-    max-width: 600px;
-    display: flex;
-    justify-content: center;
 }
 
 video { 
