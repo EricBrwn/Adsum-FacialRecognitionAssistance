@@ -188,8 +188,8 @@ async function startRecognition() {
     const runDetection = async () => {
         const canvas = faceapi.createCanvasFromMedia(video);
         document.getElementById('cameraContainer').append(canvas);
-        
-        // El cambio clave: usar videoWidth y videoHeight
+
+        // El cambio clave: usar videoWidth y videoHeight para la resolución real del lente
         const dimensions = { width: video.videoWidth, height: video.videoHeight };
         faceapi.matchDimensions(canvas, dimensions);
 
@@ -200,8 +200,30 @@ async function startRecognition() {
 
             resizedDetections.forEach(detection => {
                 const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-                const box = detection.detection.box; 
+                
+                // --- ARREGLO 1: ENCUADRAR TODA LA CABEZA (Frame Completo) ---
+                const originalBox = detection.detection.box;
+                
+                // Creamos un nuevo recuadro expandiendo el original hacia arriba y los lados
+                // El factor 'marginHeight' expande la altura hacia arriba (para el cabello)
+                const marginWidth = 0.20; // 20% más ancho a cada lado
+                const marginHeight = 0.50; // 50% más alto hacia arriba
 
+                const expandedBox = {
+                    x: originalBox.x - originalBox.width * marginWidth / 2, // Desplazar x a la izquierda
+                    y: originalBox.y - originalBox.height * marginHeight, // Desplazar y hacia arriba
+                    width: originalBox.width * (1 + marginWidth), // Ancho total expandido
+                    height: originalBox.height * (1 + (marginWidth + marginHeight)) // Altura total expandida
+                };
+                
+                // Asegurar que el recuadro no se salga del lienzo
+                expandedBox.x = Math.max(0, expandedBox.x);
+                expandedBox.y = Math.max(0, expandedBox.y);
+                expandedBox.width = Math.min(dimensions.width - expandedBox.x, expandedBox.width);
+                expandedBox.height = Math.min(dimensions.height - expandedBox.y, expandedBox.height);
+
+
+                // Actualizar el mensaje de texto en pantalla
                 if (bestMatch.label !== 'unknown') {
                     scannerMessage.innerText = `DETECTED: ${bestMatch.label.toUpperCase()}`;
                     scannerMessage.style.color = "lightgreen";
@@ -210,8 +232,23 @@ async function startRecognition() {
                     scannerMessage.innerText = "DETECTED: Unregistered person.";
                     scannerMessage.style.color = "red";
                 }   
-                new faceapi.draw.DrawBox(box, { 
-                    label: bestMatch.toString(), 
+
+
+                // --- ARREGLO 2: TEXTO CORRECTO Y CUADRO ALINEADO (Alineación Espejo) ---
+                // Dado que el video tiene espejo por CSS pero el canvas no,
+                // debemos voltear horizontalmente la coordenada X del dibujo justo aquí.
+                // Fórmula: X_espejo = Ancho_Video - X_Original - Ancho_Recuadro
+                const mirroredX = dimensions.width - expandedBox.x - expandedBox.width;
+
+                const finalDrawingBox = {
+                    ...expandedBox,
+                    x: mirroredX // Usar la coordenada X volteada para el dibujo final
+                };
+
+
+                // Dibujar el cuadro y el texto con las correcciones
+                new faceapi.draw.DrawBox(finalDrawingBox, { 
+                    label: bestMatch.toString(), // Texto de la IA (se leerá de frente)
                     boxColor: bestMatch.label === 'unknown' ? 'red' : 'green' 
                 }).draw(canvas);
             });
