@@ -188,7 +188,9 @@ async function startRecognition() {
     const runDetection = async () => {
         const canvas = faceapi.createCanvasFromMedia(video);
         document.getElementById('cameraContainer').append(canvas);
-        const dimensions = { width: video.width, height: video.height };
+        
+        // El cambio clave: usar videoWidth y videoHeight
+        const dimensions = { width: video.videoWidth, height: video.videoHeight };
         faceapi.matchDimensions(canvas, dimensions);
 
         setInterval(async () => {
