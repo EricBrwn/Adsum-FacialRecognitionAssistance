@@ -223,13 +223,35 @@ registerBtn.addEventListener('click', async () => {
             descriptor: Array.from(faceDescriptor), 
             registrationDate: new Date().toISOString(),
             groups: arrayUnion(...chosenGroups) 
-        }, {merge: true }); // Merge: true evita que se borre lo que ya existía
+        }, {merge: true });
 
         alert("Registration Successful!");
-        location.reload(); 
+        
+        // --- LA SOLUCIÓN: Limpiar el formulario sin recargar la página ---
+        
+        // 1. Limpiar campos de texto
+        document.getElementById('userName').value = "";
+        userEmailInput.value = "";
+        
+        // 2. Limpiar las píldoras de grupos (¡La memoria de allGroupsMemory se queda intacta!)
+        groupsContainer.innerHTML = ""; 
+        
+        // 3. Resetear la foto y el botón
+        photoInput.value = "";
+        document.getElementById('fileNameDisplay').textContent = "No file chosen";
+        previewImage.src = ""; // Oculta la foto anterior
+        faceDescriptor = null; // Borrar la cara anterior
+        
+        // 4. Restaurar el estado inicial
+        registerBtn.innerText = "Register User";
+        registerBtn.disabled = true; // Se bloquea hasta que suban otra foto válida
+        statusMessage.innerText = "System ready. Please fill in your details.";
+        statusMessage.style.color = "blue";
+        
     } catch (error) {
         console.error(error);
         alert("Error saving user.");
+        registerBtn.innerText = "Register User";
         registerBtn.disabled = false;
     }
 });
