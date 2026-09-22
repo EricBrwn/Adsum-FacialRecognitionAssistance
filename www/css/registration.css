@@ -173,6 +173,7 @@ img {
     border-bottom: 1px solid #eee;
     font-size: 14px;
     text-align: left;
+    color: #121212; /* ¡AGREGA ESTA LÍNEA PARA QUE SE VEA EL TEXTO! */
 }
 
 .dropdown-item:hover {
