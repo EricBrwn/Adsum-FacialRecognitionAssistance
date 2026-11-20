@@ -1,8 +1,4 @@
-// ⚙️ CONFIGURACIÓN GLOBAL
-const CONFIG = {
-    MODEL_PATH: './models', 
-    ADMIN_PASSWORD: "adsum"
-};
+// ⚙️ CONFIG now lives in js/config.js (loaded before this file).
 
 // 🌐 INYECCIÓN AUTOMÁTICA DE LA BARRA DE NAVEGACIÓN
 document.addEventListener("DOMContentLoaded", () => {
@@ -21,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 3. Crear y meter la barra de navegación al principio del body
     const navBar = document.createElement("div");
+    navBar.className = "adsum-nav";
     navBar.style.cssText = "background: #1a1c20; padding: 12px; text-align: center; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; width: 90%; max-width: 600px; margin-left: auto; margin-right: auto;";
     
     navBar.innerHTML = `

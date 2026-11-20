@@ -2,56 +2,61 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Facial Recognition Registration</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>">
     <link rel="stylesheet" href="./css/registration.css">
     <script src="face-api.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script src="js/config.js"></script>
     <script src="js/shared.js"></script>
 </head>
 <body>
 
     <h2>New User Registration</h2>
 
-    <input type="text" id="userName" placeholder="Enter their FULL NAME">
-    <br>
-    <input type="email" id="userEmail" placeholder="theiremail@example.com">
-    <br><br>
+    <main class="reg-layout">
+        <!-- LEFT: personal data + groups -->
+        <section class="card">
+            <h3>1 · Student data</h3>
+            <input type="text" id="userName" placeholder="Enter their FULL NAME" autocomplete="off">
+            <input type="email" id="userEmail" placeholder="theiremail@example.com" autocomplete="off">
 
-    <p>Upload a photo of their face (with good lighting):</p>
-    <div class="custom-file-upload">
-        <!-- El botón falso que sí podemos diseñar y traducir -->
-        <label for="photoInput" class="upload-btn">
-            📁 Choose File
-        </label>
-        
-        <!-- El botón real del navegador (lo vamos a ocultar con CSS) -->
-        <input type="file" id="photoInput" accept="image/*">
-        
-        <!-- El texto de "Ningún archivo seleccionado" -->
-        <span id="fileNameDisplay">No file chosen</span>
-    </div>
-    <br><br>
+            <h3>2 · Groups</h3>
+            <div style="position: relative;">
+                <input type="text" id="groupSearch" placeholder="🔍 Type to search or create a group..." autocomplete="off">
+                <div id="searchResults" class="dropdown-results"></div>
+            </div>
+            <div class="groups-box" id="groupsContainer"></div>
 
-    <div id="imageContainer">
-        <img id="previewImage" src="" alt="">
-    </div>
+            <p id="statusMessage">Starting...</p>
+            <button id="registerBtn" class="primary-btn" disabled>Save Registration</button>
+        </section>
 
-    <br><br>
+        <!-- RIGHT: face samples -->
+        <section class="card">
+            <h3>3 · Face samples <span id="sampleCounter" class="counter">0 / 3</span></h3>
 
-    <div style="max-width: 400px; margin: 0 auto; text-align: left;">
-        <p style="font-weight: bold; margin-bottom: 5px;">🔍 Search for or create groups: </p>
-        <div style="position: relative;">
-            <input type="text" id="groupSearch" placeholder="Type to Search..." autocomplete="off">
-            <div id="searchResults" class="dropdown-results"></div>
-        </div>
-    </div>
+            <div id="regCameraBox" class="reg-camera">
+                <video id="regVideo" autoplay muted playsinline></video>
+                <div id="captureGuide" class="capture-guide">Press "Capture" and look at the camera</div>
+            </div>
 
-    <p style="margin-top: 15px; font-size: 14px; color: #555;">Selected Groups:</p>
-    <div class="groups-box" id="groupsContainer"></div>
+            <div class="sample-actions">
+                <select id="regCameraSelect" title="Camera"></select>
+                <button id="captureBtn" class="capture-btn">📷 Capture</button>
+                <label for="photoInput" class="upload-btn">📁 Photos</label>
+                <input type="file" id="photoInput" accept="image/*" multiple>
+            </div>
 
-    <p id="statusMessage">Waiting for photo...</p>
-    <button id="registerBtn" disabled>Save Registration</button>
+            <p class="tip">
+                👓 <strong>Wears glasses?</strong> Capture once <em>with</em> and once <em>without</em> them.
+                Students never need to remove them at the scanner: the system also learns new looks automatically.
+            </p>
+
+            <div id="samplesGrid" class="samples-grid"></div>
+        </section>
+    </main>
 
     <script type="module" src="./js/registration.js"></script>
 

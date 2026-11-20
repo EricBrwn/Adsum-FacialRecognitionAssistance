@@ -1,365 +1,558 @@
-import { db } from "./firebase-config.js";
-import { collection, getDocs, addDoc, query, where, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+// =====================================================================
+// 📷 ADSUM SCANNER (index.html)
+//
+// Pipeline per frame (~12 fps):
+//   1. Grab the current video frame into an offscreen canvas
+//   2. TinyFaceDetector + 68 landmarks           (fast, every frame)
+//   3. FaceTracker: same face between frames → blink liveness per face
+//   4. Every RECOGNIZE_EVERY_MS: 128-D descriptor + gallery match + vote
+//   5. Identity stable (3/5 votes) AND blinked → attendance is recorded
+//   6. Draw big labels on the overlay + big banner under the video
+// =====================================================================
+import {
+    loadModels, tinyDetectorOptions, computeDescriptor,
+    FaceGallery, FaceTracker, addVote, serializeSample,
+} from "./face-engine.js";
+import * as data from "./data.js";
+import {
+    buildAttendanceMatrix, exportGroupXlsx, syncGroupToSharePoint, graphEnabled, handleGraphRedirect,
+} from "./excel.js";
 
-const video = document.getElementById('camera');
-const scannerMessage = document.getElementById('scannerMessage');
+// ---------------------------------------------------------------------
+// DOM
+// ---------------------------------------------------------------------
+const video = document.getElementById("camera");
+const overlay = document.getElementById("overlay");
+const cameraContainer = document.getElementById("cameraContainer");
+const scannerMessage = document.getElementById("scannerMessage");
+const banner = document.getElementById("banner");
+const bannerTitle = document.getElementById("bannerTitle");
+const bannerSubtitle = document.getElementById("bannerSubtitle");
+const recentStrip = document.getElementById("recentStrip");
+const cameraSelect = document.getElementById("cameraSelect");
 
-const recognitionTolerance = 0.45; // Adjust this value to be more or less strict on facial recognition
-const scannerTimeInterval = 700; // Time in ms between each scan (lower is more real-time but can cause performance issues on slower devices)
-
-let knownFaces = []; 
-let emailMap = {}; 
-let groupDatabases = {}; 
-let userDictionary = {}; // Saves complete object {email: {name, groups}}
-let faceMatcher = null; 
-let groupOptions = []; // Will store the list of groups for the searcher
+// ---------------------------------------------------------------------
+// STATE
+// ---------------------------------------------------------------------
+let gallery = new FaceGallery([]);
+let groupDatabases = {};   // { group: [emails] }
+let userDictionary = {};   // { email: { name, groups } }
+let groupOptions = [];
 let currentTeacherName = "Teacher";
-
 let currentStream = null;
 
-// Initialize EmailJS with your Public Key
+const tracker = new FaceTracker();
+const lastLogged = {};     // { email: timestamp }
+const recentCheckins = []; // [{ name, time }]
+let bannerHoldUntil = 0;
+let lastReport = null;     // { group, session }
+
+const frameCanvas = document.createElement("canvas");
+const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
+
 emailjs.init("PVySdKrUGNpDOYaCs");
 
+// ---------------------------------------------------------------------
+// STARTUP
+// ---------------------------------------------------------------------
 async function initializeScanner() {
     try {
-        scannerMessage.innerText = "1/3 Loading AI...";
-        await faceapi.nets.ssdMobilenetv1.loadFromUri(CONFIG.MODEL_PATH);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(CONFIG.MODEL_PATH);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(CONFIG.MODEL_PATH);
-        
-        scannerMessage.innerText = "2/3 Turning on camera...";
-        await populateCameraList(); // Buscamos todas las cámaras conectadas
-        const initialCameraId = document.getElementById('cameraSelect').value;
-        await turnOnCamera(initialCameraId); // Encendemos la primera que encontró
+        setStatus("1/3 Loading AI...");
+        await loadModels({ tiny: true });
 
-        scannerMessage.innerText = "3/3 Synchronizing Database...";
-        await downloadFirebaseData();
+        setStatus("2/3 Turning on camera...");
+        await populateCameraList();
+        await turnOnCamera(cameraSelect.value);
+
+        setStatus("3/3 Synchronizing database...");
+        await refreshDatabase();
         await loadSessionAutocomplete();
-        
+
+        startLoop();
+        await resumePendingExcelSync();
     } catch (error) {
-        console.error("Error loading the AI:", error);
-        scannerMessage.innerText = "Error: " + (error.message || error); 
-        scannerMessage.style.color = "red";
+        console.error("Error starting the scanner:", error);
+        setStatus("Error: " + (error.message || error), "red");
     }
-    startRecognition();
+}
+
+function setStatus(text, color = "") {
+    scannerMessage.innerText = text;
+    scannerMessage.style.color = color;
 }
 
 async function populateCameraList() {
     try {
-        // Pedimos permiso general primero; si no, Chrome oculta los nombres reales de las cámaras
-        await navigator.mediaDevices.getUserMedia({ video: true });
-        
+        // Ask permission once so the browser reveals real camera names, then RELEASE it.
+        // (Keeping this stream open locks the camera on many Android tablets.)
+        const probe = await navigator.mediaDevices.getUserMedia({ video: true });
+        probe.getTracks().forEach((t) => t.stop());
+
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        const cameraSelect = document.getElementById('cameraSelect');
-        
-        cameraSelect.innerHTML = ''; // Limpiamos opciones viejas
-        
-        videoDevices.forEach(device => {
-            const option = document.createElement('option');
+        const videoDevices = devices.filter((d) => d.kind === "videoinput");
+        cameraSelect.innerHTML = "";
+        videoDevices.forEach((device, i) => {
+            const option = document.createElement("option");
             option.value = device.deviceId;
-            // Si Chrome no nos da el nombre, le ponemos un nombre genérico
-            option.text = device.label || `Camera ${cameraSelect.length + 1}`;
+            option.text = device.label || `Camera ${i + 1}`;
             cameraSelect.appendChild(option);
         });
 
-        // Cuando cambies de opción en el menú, se enciende la nueva cámara
-        cameraSelect.addEventListener('change', () => {
-            turnOnCamera(cameraSelect.value);
-        });
-
+        const saved = localStorage.getItem("adsum.camera");
+        if (saved && videoDevices.some((d) => d.deviceId === saved)) cameraSelect.value = saved;
     } catch (error) {
         console.error("Error enumerating devices:", error);
     }
 }
 
+cameraSelect.addEventListener("change", () => {
+    localStorage.setItem("adsum.camera", cameraSelect.value);
+    turnOnCamera(cameraSelect.value);
+});
+
 async function turnOnCamera(deviceId = null) {
     try {
-        if (currentStream) {
-            currentStream.getTracks().forEach(track => track.stop());
-        }
-
-        // CORRECCIÓN: Si el deviceId es un texto vacío, "undefined" o null, usamos la cámara por defecto (true)
-        const isValidId = deviceId && deviceId !== "" && deviceId !== "undefined";
-        
+        if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+        const isValidId = deviceId && deviceId !== "undefined";
         const constraints = {
-            video: isValidId ? { deviceId: { exact: deviceId } } : true
+            audio: false,
+            video: {
+                ...(isValidId ? { deviceId: { exact: deviceId } } : { facingMode: "user" }),
+                width: { ideal: 1280 }, height: { ideal: 720 },
+            },
         };
-
         currentStream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = currentStream;
         await video.play();
+        tracker.clear();
     } catch (error) {
         alert("⛔ Could not access the selected camera.");
         console.error(error);
     }
 }
 
-async function downloadFirebaseData() {
-    try {
-        knownFaces = []; emailMap = {}; groupDatabases = {}; userDictionary = {};
-        const querySnapshot = await getDocs(collection(db, "Users"));
-        
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            // Note: Now looking for 'fullName' to match English registration
-            if (!data.fullName || !data.descriptor) return; 
+// Keep the overlay exactly the same size/aspect as the real video stream
+function syncOverlaySize() {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (!w || !h) return false;
+    if (overlay.width !== w || overlay.height !== h) {
+        overlay.width = w; overlay.height = h;
+        frameCanvas.width = w; frameCanvas.height = h;
+        cameraContainer.style.setProperty("--ar", `${w / h}`);
+    }
+    return true;
+}
 
-            const name = String(data.fullName);
-            const email = doc.id;
-            emailMap[name] = email;
-            
-            // Note: Now looking for 'groups'
-            const personGroups = data.groups || ["No Group"];
-            
-            // Fill the master dictionary for the final report
-            userDictionary[email] = { name: name, groups: personGroups };
-    
-            personGroups.forEach(groupName => {
-                if (!groupDatabases[groupName]) groupDatabases[groupName] = [];
-                groupDatabases[groupName].push(email);
-            });
+async function refreshDatabase() {
+    const { people, groups } = await data.loadUsers();
+    gallery = new FaceGallery(people);
+    groupDatabases = groups;
+    userDictionary = {};
+    people.forEach((p) => (userDictionary[p.id] = { name: p.name, groups: p.groups }));
 
-            const labeledFace = new faceapi.LabeledFaceDescriptors(name, [new Float32Array(data.descriptor)]);
-            knownFaces.push(labeledFace);
-        });
+    groupOptions = [{ value: "all", text: "All registered users" }];
+    Object.keys(groupDatabases).sort().forEach((g) => groupOptions.push({ value: g, text: `${g} (${groupDatabases[g].length} people)` }));
+    document.getElementById("modalGroupSearch").value = "";
+    document.getElementById("hiddenGroupSelect").value = "";
 
-        // Validar que existan rostros antes de crear el reconocedor
-        if (knownFaces.length > 0) {
-            faceMatcher = new faceapi.FaceMatcher(knownFaces, recognitionTolerance);
-        } else {
-            console.warn("No hay rostros registrados en la base de datos.");
-            scannerMessage.innerText = "No users found in database.";
-            scannerMessage.style.color = "orange";
-        }
-                    
-        // Fill the smart group searcher
-        groupOptions = [{ value: "all", text: "All registered users" }];
-        for (const group in groupDatabases) {
-            groupOptions.push({
-                value: group,
-                text: `${group} (${groupDatabases[group].length} people)`
-            });
-        }
-        
-        // Configure default values (leave blank to prevent accidental massive emails)
-        document.getElementById('modalGroupSearch').value = "";
-        document.getElementById('hiddenGroupSelect').value = "";
-        document.getElementById('modalGroupSearch').placeholder = "Type to search...";
-
-        scannerMessage.innerText = "System ready.";
-        scannerMessage.style.color = "lightgreen";
-    } catch (error) {
-        console.error(error);
+    const withoutSamples = people.filter((p) => p.samples.length === 0).length;
+    const fewSamples = people.filter((p) => p.samples.length > 0 && p.samples.length < CONFIG.ENROLLMENT.MIN_SAMPLES).length;
+    if (gallery.size === 0) {
+        setStatus("No users with faces found in database.", "orange");
+    } else {
+        setStatus("System ready", "lightgreen");
+        // Details go to the console (and to Admin → Calibration), not to the students' screen.
+        console.info(`[Adsum] ${gallery.size} people loaded · ${fewSamples} with < ${CONFIG.ENROLLMENT.MIN_SAMPLES} samples · ${withoutSamples} without face`);
     }
 }
 
 async function loadSessionAutocomplete() {
-    const sessionsSnapshot = await getDocs(collection(db, "Sessions"));
-    const sessionDatalist = document.getElementById('sessionList');
-    sessionDatalist.innerHTML = "";
-    sessionsSnapshot.forEach(doc => {
-        sessionDatalist.innerHTML += `<option value="${doc.id}"></option>`;
-    });
+    const sessions = await data.getSessions();
+    const list = document.getElementById("sessionList");
+    list.innerHTML = "";
+    sessions.forEach((s) => { const o = document.createElement("option"); o.value = s; list.appendChild(o); });
 }
 
-let lastUserLog = {}; 
-async function logAccess(personName) {
-    const currentTime = Date.now(); 
-    if (lastUserLog[personName] && (currentTime - lastUserLog[personName] < 60000)) return; 
-
-    lastUserLog[personName] = currentTime;
-    const personEmail = emailMap[personName] || "Unknown";
-
-    try {
-        const currentDate = new Date();
-        await addDoc(collection(db, "History"), {
-            name: personName,
-            email: personEmail,
-            date: currentDate.toLocaleDateString(), 
-            time: currentDate.toLocaleTimeString(),  
-            timestamp: currentTime 
-        });
-        console.log(`✅ Log: Entry for ${personName} registered.`);
-    } catch (error) { console.error(error); }
-}
-
-async function startRecognition() {
-    const runDetection = async () => {
-        const canvas = faceapi.createCanvasFromMedia(video);
-        document.getElementById('cameraContainer').append(canvas);
-
-        // El cambio clave: usar videoWidth y videoHeight para la resolución real del lente
-        const dimensions = { width: video.videoWidth, height: video.videoHeight };
-        faceapi.matchDimensions(canvas, dimensions);
-
-        setInterval(async () => {
-            const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
-            const resizedDetections = faceapi.resizeResults(detections, dimensions);
-            canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-
-            resizedDetections.forEach(detection => {
-                const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-                
-                // --- ARREGLO 1: ENCUADRAR TODA LA CABEZA (Frame Completo) ---
-                const originalBox = detection.detection.box;
-                
-                // Creamos un nuevo recuadro expandiendo el original hacia arriba y los lados
-                // El factor 'marginHeight' expande la altura hacia arriba (para el cabello)
-                const marginWidth = 0.20; // 20% más ancho a cada lado
-                const marginHeight = 0.50; // 50% más alto hacia arriba
-
-                const expandedBox = {
-                    x: originalBox.x - originalBox.width * marginWidth / 2, // Desplazar x a la izquierda
-                    y: originalBox.y - originalBox.height * marginHeight, // Desplazar y hacia arriba
-                    width: originalBox.width * (1 + marginWidth), // Ancho total expandido
-                    height: originalBox.height * (1 + (marginWidth + marginHeight)) // Altura total expandida
-                };
-                
-                // Asegurar que el recuadro no se salga del lienzo
-                expandedBox.x = Math.max(0, expandedBox.x);
-                expandedBox.y = Math.max(0, expandedBox.y);
-                expandedBox.width = Math.min(dimensions.width - expandedBox.x, expandedBox.width);
-                expandedBox.height = Math.min(dimensions.height - expandedBox.y, expandedBox.height);
-
-
-                // Actualizar el mensaje de texto en pantalla
-                if (bestMatch.label !== 'unknown') {
-                    scannerMessage.innerText = `DETECTED: ${bestMatch.label.toUpperCase()}`;
-                    scannerMessage.style.color = "lightgreen";
-                    logAccess(bestMatch.label);
-                } else {
-                    scannerMessage.innerText = "DETECTED: Unregistered person.";
-                    scannerMessage.style.color = "red";
-                }   
-
-
-                // --- ARREGLO 2: TEXTO CORRECTO Y CUADRO ALINEADO (Alineación Espejo) ---
-                // Dado que el video tiene espejo por CSS pero el canvas no,
-                // debemos voltear horizontalmente la coordenada X del dibujo justo aquí.
-                // Fórmula: X_espejo = Ancho_Video - X_Original - Ancho_Recuadro
-                const mirroredX = dimensions.width - expandedBox.x - expandedBox.width;
-
-                const finalDrawingBox = {
-                    ...expandedBox,
-                    x: mirroredX // Usar la coordenada X volteada para el dibujo final
-                };
-
-
-                // Dibujar el cuadro y el texto con las correcciones
-                new faceapi.draw.DrawBox(finalDrawingBox, { 
-                    label: bestMatch.toString(), // Texto de la IA (se leerá de frente)
-                    boxColor: bestMatch.label === 'unknown' ? 'red' : 'green' 
-                }).draw(canvas);
-            });
-        }, scannerTimeInterval);
+// ---------------------------------------------------------------------
+// REAL-TIME LOOP (self-scheduling → frames never overlap)
+// ---------------------------------------------------------------------
+function startLoop() {
+    const tick = async () => {
+        const t0 = performance.now();
+        try { await processFrame(); } catch (e) { console.error("Frame error:", e); }
+        setTimeout(tick, Math.max(0, CONFIG.DETECTION.TARGET_FRAME_MS - (performance.now() - t0)));
     };
-
-    if (video.readyState >= 3) runDetection();
-    else video.addEventListener('playing', runDetection);
+    tick();
 }
 
+async function processFrame() {
+    if (video.readyState < 2 || !syncOverlaySize()) return;
+    frameCtx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+
+    const minWidth = frameCanvas.width * CONFIG.DETECTION.MIN_FACE_WIDTH_RATIO;
+    const detections = (await faceapi.detectAllFaces(frameCanvas, tinyDetectorOptions()).withFaceLandmarks())
+        .filter((d) => d.detection.box.width >= minWidth);
+
+    const now = Date.now();
+    const tracks = tracker.update(detections, now, frameCanvas);
+
+    // The descriptor is the expensive step (~100-300 ms on a tablet). Doing it for every face on
+    // every frame made the video freeze and blinks (100-400 ms) fall between two frames.
+    // So: at most ONE descriptor per frame, never for a face that is blinking right now, and
+    // rarely once the identity is already confirmed.
+    if (gallery.size > 0) {
+        const R = CONFIG.RECOGNITION;
+        const due = tracks
+            .filter((t) => !t.markedAt && !t.liveness.isClosing &&
+                now - t.lastRecognizedAt >= (t.identity ? R.VERIFY_EVERY_MS : R.RECOGNIZE_EVERY_MS))
+            .sort((a, b) => a.lastRecognizedAt - b.lastRecognizedAt)[0];
+        if (due) {
+            due.lastRecognizedAt = now;
+            const descriptor = await computeDescriptor(frameCanvas, due.det);
+            due.lastDescriptor = descriptor;
+            addVote(due, gallery.match(descriptor));
+        }
+    }
+
+    // Someone already recorded in the last minute doesn't need to blink again
+    // (e.g. they stepped out of frame and came back).
+    for (const track of tracks) {
+        const recentlyLogged = track.identity && lastLogged[track.identity] && now - lastLogged[track.identity] < CONFIG.ATTENDANCE.COOLDOWN_MS;
+        if (track.identity && !track.markedAt && (track.live || recentlyLogged)) markAttendance(track);
+    }
+
+    drawOverlay(tracks, now);
+    updateBanner(tracks, now);
+}
+
+// ---------------------------------------------------------------------
+// ATTENDANCE
+// ---------------------------------------------------------------------
+function markAttendance(track) {
+    const email = track.identity;
+    const person = gallery.get(email);
+    const now = Date.now();
+    track.markedAt = now;
+
+    if (lastLogged[email] && now - lastLogged[email] < CONFIG.ATTENDANCE.COOLDOWN_MS) {
+        track.alreadyLogged = true;
+        return;
+    }
+    lastLogged[email] = now;
+    const match = track.lastMatch || {};
+
+    data.logEntry({ email, name: person.name, distance: match.distance, margin: match.margin, liveness: track.live })
+        .then(() => console.log(`✅ Entry for ${person.name} registered.`))
+        .catch((e) => console.error("Could not save entry:", e));
+
+    recentCheckins.unshift({ name: person.name, time: new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+    recentCheckins.splice(6);
+    renderRecent();
+    bannerHoldUntil = now + CONFIG.ATTENDANCE.BANNER_HOLD_MS;
+    showBanner("success", `✅ ${person.name}`, `Attendance recorded · ${recentCheckins[0].time}`);
+
+    if (track.lastDescriptor) learnSample(email, track.lastDescriptor, match);
+}
+
+/**
+ * 🧠 Adaptive gallery: stores a new live sample when the match is very confident.
+ * This is what makes "with glasses / without glasses" work automatically over time.
+ */
+async function learnSample(email, descriptor, match) {
+    const A = CONFIG.ADAPTIVE;
+    if (!A.ENABLED) return;
+    // match.distance is already the distance to the CLOSEST stored sample of this person,
+    // so it also measures how "new" this look is (novelty).
+    if (!(match.distance <= A.MAX_DISTANCE && match.distance >= A.MIN_NOVELTY && match.margin >= A.MIN_MARGIN)) return;
+
+    const person = gallery.get(email);
+    const autos = person.samples.filter((s) => s.src === "auto");
+    const lastAuto = Math.max(0, ...autos.map((s) => Date.parse(s.at) || 0));
+    if (Date.now() - lastAuto < A.MIN_HOURS_BETWEEN * 3600 * 1000) return;
+
+    const newSample = { v: descriptor, src: "auto", at: new Date().toISOString() };
+    let samples = [...person.samples, newSample];
+    if (autos.length >= A.MAX_AUTO_SAMPLES) {
+        const oldest = autos.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0))[0];
+        samples = samples.filter((s) => s !== oldest);
+    }
+    try {
+        await data.replaceUserSamples(email, samples.map((s) => ({ ...serializeSample(s.v, s.src), at: s.at })));
+        person.samples = samples;
+        console.log(`🧠 Learned a new appearance for ${person.name} (distance ${match.distance.toFixed(3)}).`);
+    } catch (e) {
+        console.warn("Could not store adaptive sample:", e);
+    }
+}
+
+// ---------------------------------------------------------------------
+// DRAWING (big, readable labels)
+// ---------------------------------------------------------------------
+const COLORS = { success: "#2ecc71", pending: "#f5a623", unknown: "#e74c3c", analyzing: "#9aa5b1" };
+
+function trackStatus(track, now) {
+    if (track.identity && track.markedAt) return "success";
+    if (track.identity) return "pending";
+    if (track.votes.length >= CONFIG.RECOGNITION.VOTE_WINDOW && !track.identity) return "unknown";
+    return "analyzing";
+}
+
+function trackLabel(track, status) {
+    const person = track.identity ? gallery.get(track.identity) : null;
+    switch (status) {
+        case "success": return person.name;
+        case "pending": return `${person.name} · Blink`;
+        case "unknown": return "Not registered";
+        default: return "…";
+    }
+}
+
+function drawOverlay(tracks, now) {
+    const ctx = overlay.getContext("2d");
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const displayScale = overlay.getBoundingClientRect().width / overlay.width || 1;
+
+    for (const track of tracks) {
+        const status = trackStatus(track, now);
+        const color = COLORS[status];
+        const b = track.box;
+        // The <video> is mirrored with CSS, the canvas is not → mirror X here.
+        const x = overlay.width - b.x - b.width;
+        const y = b.y - b.height * 0.25;         // a bit of forehead/hair
+        const h = b.height * 1.3;
+
+        ctx.lineWidth = Math.max(4, b.width * 0.025);
+        ctx.strokeStyle = color;
+        roundRect(ctx, x, y, b.width, h, 16);
+        ctx.stroke();
+
+        // Font: at least 30 CSS px on screen, bigger for closer faces
+        const fontPx = Math.max(30 / displayScale, b.width * 0.16);
+        ctx.font = `bold ${fontPx}px Arial, sans-serif`;
+        const text = trackLabel(track, status);
+        const padding = fontPx * 0.35;
+        const textW = ctx.measureText(text).width + padding * 2;
+        const labelH = fontPx + padding * 1.4;
+        let lx = Math.min(Math.max(0, x + b.width / 2 - textW / 2), overlay.width - textW);
+        let ly = y - labelH - 6;
+        if (ly < 0) ly = Math.min(overlay.height - labelH, y + h + 6);
+
+        ctx.fillStyle = color;
+        roundRect(ctx, lx, ly, textW, labelH, 12);
+        ctx.fill();
+        ctx.fillStyle = status === "pending" ? "#111" : "#fff";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, lx + padding, ly + labelH / 2);
+
+        if (CONFIG.LIVENESS.DEBUG == true) drawDebug(ctx, track, x, y + h + 4, displayScale);
+    }
+}
+
+/** Live numbers for tuning thresholds on the real tablet (CONFIG.LIVENESS.DEBUG = true). */
+function drawDebug(ctx, track, x, y, displayScale) {
+    const L = track.liveness, m = track.lastMatch;
+    const lines = [
+        `EAR ${L.lastEar.toFixed(3)} / base ${L.baseline.toFixed(3)}`,
+        `eye ${L.lastEyeCorr.toFixed(2)}  ref ${L.lastRefCorr.toFixed(2)}`,
+        `blinks ${L.blinks}${L.passedBy ? " (" + L.passedBy + ")" : ""}`,
+        m ? `dist ${m.distance.toFixed(3)}  margin ${Number.isFinite(m.margin) ? m.margin.toFixed(3) : "∞"}` : "dist —",
+    ];
+    const fs = 16 / displayScale;
+    ctx.font = `${fs}px monospace`;
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillRect(x, y, fs * 17, fs * 1.25 * lines.length + 6);
+    ctx.fillStyle = "#0f0";
+    lines.forEach((l, i) => ctx.fillText(l, x + 4, y + 3 + i * fs * 1.25));
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+// ---------------------------------------------------------------------
+// BIG BANNER (what the student reads)
+// ---------------------------------------------------------------------
+function showBanner(kind, title, subtitle = "") {
+    banner.className = `banner banner--${kind}`;
+    if (bannerTitle.textContent !== title) bannerTitle.textContent = title;
+    if (bannerSubtitle.textContent !== subtitle) bannerSubtitle.textContent = subtitle;
+}
+
+function updateBanner(tracks, now) {
+    if (now < bannerHoldUntil) return; // keep the success message visible for a moment
+
+    if (gallery.size === 0) return showBanner("idle", "No students registered yet", "Use the Registration page first");
+    if (tracks.length === 0) return showBanner("idle", "Step in front of the camera", "Look at the screen and blink");
+
+    const primary = tracks.reduce((a, b) => (b.box.width > a.box.width ? b : a));
+    const status = trackStatus(primary, now);
+    const person = primary.identity ? gallery.get(primary.identity) : null;
+
+    if (status === "success") {
+        const time = new Date(lastLogged[primary.identity] || now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return showBanner("success", `✅ ${person.name}`, primary.alreadyLogged ? `Already recorded at ${time}` : `Attendance recorded · ${time}`);
+    }
+    if (status === "pending") return showBanner("pending", person.name, "Blink");
+    if (status === "unknown") return showBanner("unknown", "Face not recognized", "Ask your teacher to register you");
+    return showBanner("analyzing", "Analyzing…", "Look at the screen");
+}
+
+function renderRecent() {
+    recentStrip.innerHTML = recentCheckins
+        .map((c) => `<span class="recent-chip">✅ ${escapeHtml(c.name)} <small>${c.time}</small></span>`)
+        .join("");
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------------------------------------------------------------------
+// ROLL CALL REPORT
+// ---------------------------------------------------------------------
 async function calculateAbsences() {
     try {
-        const selectedGroup = document.getElementById('hiddenGroupSelect').value;
-        const startTimeHTML = document.getElementById('startTime').value;
-        const endTimeHTML = document.getElementById('endTime').value;
-        const selectedSession = document.getElementById('sessionInput').value.trim();
+        const selectedGroup = document.getElementById("hiddenGroupSelect").value;
+        const startTimeHTML = document.getElementById("startTime").value;
+        const endTimeHTML = document.getElementById("endTime").value;
+        const selectedSession = document.getElementById("sessionInput").value.trim();
+        const sendEmails = document.getElementById("sendEmailsCheck").checked;
 
-        // FAILSAFE: Si el grupo está vacío
         if (selectedGroup === "") {
             alert("⚠️ Action Stopped: You must select a valid group from the dropdown list.");
             return;
         }
-
-        if (startTimeHTML === "" || endTimeHTML === "" || selectedSession === "") {
+        if (!startTimeHTML || !endTimeHTML || !selectedSession) {
             alert("⚠️ Hold on! Please fill in the times (From / To) and the session name before generating the report.");
-            return; 
+            return;
         }
-
-        // Guarda la sesión en Firebase automáticamente
-        await setDoc(doc(db, "Sessions", selectedSession), { name: selectedSession });
-
-        let guestList = (selectedGroup === "all") ? Object.keys(userDictionary) : (groupDatabases[selectedGroup] || []);
 
         const today = new Date();
-        const [hStart, mStart] = startTimeHTML.split(':');
-        const [hEnd, mEnd] = endTimeHTML.split(':');
-        const startTimeTs = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hStart), parseInt(mStart), 0).getTime(); 
-        const endTimeTs = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hEnd), parseInt(mEnd), 0).getTime();
+        const at = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m, 0).getTime(); };
+        const startMs = at(startTimeHTML);
+        const endMs = at(endTimeHTML) + 59999; // include the whole last minute
+        if (endMs <= startMs) { alert("⚠️ 'To' must be later than 'From'."); return; }
 
-        const queryResult = query(collection(db, "History"), where("date", "==", today.toLocaleDateString()));
-        const results = await getDocs(queryResult);
+        const guestList = selectedGroup === "all" ? Object.keys(userDictionary) : (groupDatabases[selectedGroup] || []);
+        const entries = await data.getEntriesBetween(startMs, endMs);
 
-        let attendingEmails = new Set(); 
-        results.forEach((doc) => {
-            const data = doc.data();
-            if (data.email && data.timestamp >= startTimeTs && data.timestamp <= endTimeTs) {
-                attendingEmails.add(data.email);
-            }
-        });
+        const firstEntry = {};
+        entries.forEach((e) => { if (e.email && (!firstEntry[e.email] || e.timestamp < firstEntry[e.email])) firstEntry[e.email] = e.timestamp; });
 
-        let attendees = [];
-        let absentees = [];
-
-        guestList.forEach(guestEmail => {
-            const userInfo = userDictionary[guestEmail] || { name: "Unknown", groups: ["No Group"] };
-            const structuredData = { name: userInfo.name, email: guestEmail, groups: userInfo.groups };
-
-            if (attendingEmails.has(guestEmail)) {
-                attendees.push(structuredData);
+        const attendees = [], absentees = [], records = {};
+        guestList.forEach((email) => {
+            const info = userDictionary[email] || { name: "Unknown", groups: ["No Group"] };
+            const person = { name: info.name, email, groups: info.groups };
+            if (firstEntry[email]) {
+                attendees.push(person);
+                records[email] = { name: info.name, status: "present", time: new Date(firstEntry[email]).toLocaleTimeString() };
             } else {
-                absentees.push(structuredData);
-                // Llamada al correo con la nueva variable
-                sendAbsenceEmail(structuredData.name, structuredData.email, selectedSession);
+                absentees.push(person);
+                records[email] = { name: info.name, status: "absent" };
             }
         });
 
-        // Dibuja el reporte visual
-        const reportArea = document.getElementById('reportArea');
-        reportArea.style.display = 'block';
-
-        let html = `<h3 style="color: #fbc531; margin-top:0; border-bottom: 1px solid #444; padding-bottom:5px;">📊 ${selectedSession.toUpperCase()}</h3>`;
-        html += `<p style="margin: 5px 0;"><strong>Filter:</strong> Group ${selectedGroup.toUpperCase()}</p>`;
-        
-        html += `<h4 style="color: #2ecc71; margin-bottom:5px;">✅ ATTENDED (${attendees.length}):</h4><ul>`;
-        if(attendees.length === 0) html += `<li>Nobody attended during this timeframe.</li>`;
-        attendees.forEach(p => html += `<li><strong>${p.name}</strong> <span style="color:#aaa; font-size:11px;">(${p.groups.join(', ')})</span></li>`);
-        html += `</ul>`;
-
-        html += `<h4 style="color: #e74c3c; margin-bottom:5px;">❌ ABSENT (${absentees.length}):</h4><ul>`;
-        if(absentees.length === 0) html += `<li>Perfect attendance! Nobody was absent.</li>`;
-        absentees.forEach(p => html += `<li><strong>${p.name}</strong> <span style="color:#aaa; font-size:11px;">(${p.groups.join(', ')})</span></li>`);
-        html += `</ul>`;
-
-        reportArea.innerHTML = html;
-
-
-        // --- NUEVO: Enviar resumen al profesor ---
-        const emailInput = document.getElementById('teacherEmailInput').value.trim();
-        if (emailInput && selectedGroup !== "all") {
-            sendTeacherSummaryEmail(emailInput, currentTeacherName, selectedGroup, selectedSession, attendees, absentees);
+        await data.saveSession(selectedSession);
+        if (selectedGroup !== "all") {
+            await data.saveAttendance({
+                group: selectedGroup, session: selectedSession, startMs, endMs,
+                teacherEmail: document.getElementById("teacherEmailInput").value.trim() || null, records,
+            });
+            lastReport = { group: selectedGroup, session: selectedSession };
+            document.getElementById("excelActions").style.display = "flex";
+            document.getElementById("syncExcelBtn").style.display = graphEnabled() ? "" : "none";
         }
 
-    } catch (error) { 
-        console.error("Error en el reporte:", error); 
-        alert("Error processing report."); 
+        renderReport(selectedSession, selectedGroup, attendees, absentees);
+
+        if (sendEmails && absentees.length > 0 &&
+            confirm(`📧 Send absence emails to ${absentees.length} student(s)?`)) {
+            absentees.forEach((p) => sendAbsenceEmail(p.name, p.email, selectedSession));
+        }
+        const teacherEmail = document.getElementById("teacherEmailInput").value.trim();
+        if (sendEmails && teacherEmail && selectedGroup !== "all") {
+            sendTeacherSummaryEmail(teacherEmail, currentTeacherName, selectedGroup, selectedSession, attendees, absentees);
+        }
+    } catch (error) {
+        console.error("Report error:", error);
+        alert("Error processing report: " + (error.message || error));
     }
 }
 
-//EMAILS
-async function sendAbsenceEmail(personName, personEmail, sessionName) {
-    // 1. Prepare exact data payload matching the new EmailJS template
-    let parameters = {
-        name: personName,
-        target_email: personEmail,
-        session_name: sessionName,
-        drive_link: "Link pending addition..." 
-    };
+function renderReport(session, group, attendees, absentees) {
+    const reportArea = document.getElementById("reportArea");
+    reportArea.style.display = "block";
+    const item = (p) => `<li><strong>${escapeHtml(p.name)}</strong> <span style="color:#aaa; font-size:11px;">(${escapeHtml(p.groups.join(", "))})</span></li>`;
+    reportArea.innerHTML = `
+        <h3 style="color:#fbc531; margin-top:0; border-bottom:1px solid #444; padding-bottom:5px;">📊 ${escapeHtml(session.toUpperCase())}</h3>
+        <p style="margin:5px 0;"><strong>Filter:</strong> Group ${escapeHtml(group.toUpperCase())}</p>
+        <h4 style="color:#2ecc71; margin-bottom:5px;">✅ ATTENDED (${attendees.length}):</h4>
+        <ul>${attendees.length ? attendees.map(item).join("") : "<li>Nobody attended during this timeframe.</li>"}</ul>
+        <h4 style="color:#e74c3c; margin-bottom:5px;">❌ ABSENT (${absentees.length}):</h4>
+        <ul>${absentees.length ? absentees.map(item).join("") : "<li>Perfect attendance! Nobody was absent.</li>"}</ul>`;
+}
 
+// ---------------------------------------------------------------------
+// EXCEL
+// ---------------------------------------------------------------------
+async function groupMatrix(group) {
+    const docs = await data.getGroupAttendance(group);
+    const roster = (groupDatabases[group] || []).map((email) => ({ id: email, name: userDictionary[email]?.name || email }));
+    return buildAttendanceMatrix(docs, roster);
+}
+
+document.getElementById("exportExcelBtn").addEventListener("click", async () => {
+    if (!lastReport) return;
     try {
-        // 2. Tell the postman to deliver the message
-        let response = await emailjs.send("service_s9ugx0j", "template_ayapn8q", parameters);
+        const name = await exportGroupXlsx(lastReport.group, await groupMatrix(lastReport.group));
+        console.log("Excel generated:", name);
+    } catch (e) {
+        console.error(e);
+        alert("❌ Could not generate the Excel file: " + e.message);
+    }
+});
+
+document.getElementById("syncExcelBtn").addEventListener("click", () => lastReport && runSharePointSync(lastReport.group));
+
+async function runSharePointSync(group) {
+    const btn = document.getElementById("syncExcelBtn");
+    btn.disabled = true; btn.innerText = "Syncing…";
+    try {
+        const result = await syncGroupToSharePoint(group, await groupMatrix(group));
+        alert(`✅ Excel updated: "${result.workbook}" → sheet "${result.sheet}"`);
+    } catch (e) {
+        console.error(e);
+        alert("❌ SharePoint sync failed: " + e.message);
+    } finally {
+        btn.disabled = false; btn.innerText = "☁️ Sync to SharePoint Excel";
+    }
+}
+
+/** After the Microsoft login redirect, finish the sync the teacher had asked for. */
+async function resumePendingExcelSync() {
+    try {
+        const pending = await handleGraphRedirect();
+        if (pending && pending.type === "sync" && pending.group) await runSharePointSync(pending.group);
+    } catch (e) {
+        console.error(e);
+        alert("❌ Microsoft sign-in failed: " + e.message);
+    }
+}
+
+// ---------------------------------------------------------------------
+// EMAILS (EmailJS)
+// ---------------------------------------------------------------------
+async function sendAbsenceEmail(personName, personEmail, sessionName) {
+    const parameters = { name: personName, target_email: personEmail, session_name: sessionName, drive_link: "Link pending addition..." };
+    try {
+        await emailjs.send("service_s9ugx0j", "template_ayapn8q", parameters);
         console.log("✅ Email successfully sent to: " + personEmail);
     } catch (error) {
         console.error("❌ Error sending email to: " + personEmail, error);
@@ -367,146 +560,94 @@ async function sendAbsenceEmail(personName, personEmail, sessionName) {
 }
 
 async function sendTeacherSummaryEmail(teacherEmail, teacherName, group, session, attendees, absentees) {
-    // Convertimos los arreglos en texto legible
-    const attendeesText = attendees.length > 0 ? attendees.map(a => a.name).join(", ") : "Nadie asistió.";
-    const absenteesText = absentees.length > 0 ? absentees.map(a => a.name).join(", ") : "Asistencia perfecta.";
-
-    let parameters = {
-        teacher_name: teacherName,
-        teacher_email: teacherEmail,
-        group_name: group,
-        session_name: session,
-        attendees_list: attendeesText,
-        absentees_list: absenteesText
+    const parameters = {
+        teacher_name: teacherName, teacher_email: teacherEmail, group_name: group, session_name: session,
+        attendees_list: attendees.length ? attendees.map((a) => a.name).join(", ") : "Nadie asistió.",
+        absentees_list: absentees.length ? absentees.map((a) => a.name).join(", ") : "Asistencia perfecta.",
     };
-
     try {
-        // OJO: Tendrás que cambiar "TEMPLATE_MAESTROS" por el ID real de tu nueva plantilla
         await emailjs.send("service_s9ugx0j", "template_49u2dbi", parameters);
-        console.log("✅ Reporte resumen enviado al profesor: " + teacherEmail);
+        console.log("✅ Summary sent to teacher: " + teacherEmail);
     } catch (error) {
-        console.error("❌ Error enviando el resumen al profesor.", error);
+        console.error("❌ Error sending the teacher summary.", error);
     }
 }
 
-const adminModal = document.getElementById('adminModal');
-document.getElementById('openAdminBtn').addEventListener('click', () => { adminModal.style.display = 'flex'; });
-document.getElementById('closeModalBtn').addEventListener('click', () => { 
-    adminModal.style.display = 'none'; 
-    document.getElementById('reportArea').style.display = 'none'; // Reset visual report upon closing
+// ---------------------------------------------------------------------
+// MODAL + SMART GROUP SEARCHER
+// ---------------------------------------------------------------------
+const adminModal = document.getElementById("adminModal");
+document.getElementById("openAdminBtn").addEventListener("click", () => { adminModal.style.display = "flex"; });
+document.getElementById("closeModalBtn").addEventListener("click", () => {
+    adminModal.style.display = "none";
+    document.getElementById("reportArea").style.display = "none";
+    document.getElementById("excelActions").style.display = "none";
 });
-document.getElementById('generateReportBtn').addEventListener('click', calculateAbsences);
+document.getElementById("generateReportBtn").addEventListener("click", calculateAbsences);
 
-// --- MODAL SMART GROUP SEARCHER ENGINE ---
-const modalGroupSearch = document.getElementById('modalGroupSearch');
-const modalGroupResults = document.getElementById('modalGroupResults');
-const hiddenGroupSelect = document.getElementById('hiddenGroupSelect');
+const modalGroupSearch = document.getElementById("modalGroupSearch");
+const modalGroupResults = document.getElementById("modalGroupResults");
+const hiddenGroupSelect = document.getElementById("hiddenGroupSelect");
 
-// When typing
-modalGroupSearch.addEventListener('input', () => {
-    let text = modalGroupSearch.value.toLowerCase().trim();
-    modalGroupResults.innerHTML = ""; 
-    
-    // IMPORTANT: Clear hidden value on first keystroke to prevent accidental previous group selection
-    hiddenGroupSelect.value = ""; 
+modalGroupSearch.addEventListener("input", () => {
+    const text = modalGroupSearch.value.toLowerCase().trim();
+    modalGroupResults.innerHTML = "";
+    hiddenGroupSelect.value = ""; // prevents keeping a previous group by accident
 
-    let matches = text === "" 
-        ? groupOptions 
-        : groupOptions.filter(g => g.text.toLowerCase().includes(text));
-
-    // If writing garbage that doesn't exist
+    const matches = text === "" ? groupOptions : groupOptions.filter((g) => g.text.toLowerCase().includes(text));
     if (matches.length === 0) {
-        let errorDiv = document.createElement("div");
+        const errorDiv = document.createElement("div");
         errorDiv.className = "dropdown-item";
         errorDiv.style.color = "red";
         errorDiv.innerText = "❌ This group does not exist";
         modalGroupResults.appendChild(errorDiv);
     } else {
-        matches.forEach(match => {
-            let div = document.createElement("div");
+        matches.forEach((match) => {
+            const div = document.createElement("div");
             div.className = "dropdown-item";
-            div.innerText = match.text; 
-            
-            // Only if valid option clicked, save real value
+            div.innerText = match.text;
             div.addEventListener("click", () => {
-                modalGroupSearch.value = match.text; 
-                hiddenGroupSelect.value = match.value;  
+                modalGroupSearch.value = match.text;
+                hiddenGroupSelect.value = match.value;
                 modalGroupResults.style.display = "none";
             });
             modalGroupResults.appendChild(div);
         });
     }
-
     modalGroupResults.style.display = "block";
 });
 
-// ENHANCED UX: Select all text on click to easily overwrite
-modalGroupSearch.addEventListener('focus', () => {
-    modalGroupSearch.select(); 
-    modalGroupSearch.dispatchEvent(new Event('input')); 
+modalGroupSearch.addEventListener("focus", () => {
+    modalGroupSearch.select();
+    modalGroupSearch.dispatchEvent(new Event("input"));
 });
 
-// Hide if clicked outside and clean up typos
 document.addEventListener("click", (e) => {
     if (e.target !== modalGroupSearch && e.target !== modalGroupResults) {
         modalGroupResults.style.display = "none";
-        
-        // If clicked outside without an official group selected, erase invented text
-        if (hiddenGroupSelect.value === "") {
-            modalGroupSearch.value = "";
-        }
+        if (hiddenGroupSelect.value === "") modalGroupSearch.value = "";
     }
 });
 
 async function loadTeacherGroups() {
-    const emailInput = document.getElementById('teacherEmailInput').value.trim();
-    
-    if (!emailInput) {
-        alert("⚠️ Please enter your teacher email first.");
-        return;
-    }
-
+    const emailInput = document.getElementById("teacherEmailInput").value.trim().toLowerCase();
+    if (!emailInput) { alert("⚠️ Please enter your teacher email first."); return; }
     try {
-        const teacherRef = doc(db, "Teachers", emailInput);
-        const teacherSnap = await getDoc(teacherRef); // ¡Aquí estaba el error antes!
+        const teacher = await data.getTeacher(emailInput);
+        if (!teacher) { alert("❌ Teacher not found in the database. Please check the email."); return; }
+        currentTeacherName = teacher.name;
+        const teacherGroups = teacher.groups || [];
+        if (teacherGroups.length === 0) { alert("⚠️ No groups assigned to this teacher yet."); return; }
 
-        if (teacherSnap.exists()) {
-            const teacherData = teacherSnap.data();
-            currentTeacherName = teacherData.name;
-            const teacherGroups = teacherData.groups || [];
-
-            if (teacherGroups.length > 0) {
-                // 1. Limpiamos las opciones globales de tu buscador inteligente
-                groupOptions = []; 
-                
-                // 2. Agregamos SOLAMENTE los grupos de este profesor
-                teacherGroups.forEach(group => {
-                    // Calculamos cuántos alumnos hay basándonos en tu base de datos descargada
-                    const count = groupDatabases[group] ? groupDatabases[group].length : 0;
-                    groupOptions.push({
-                        value: group,
-                        text: `${group} (${count} people)`
-                    });
-                });
-
-                // 3. Limpiamos visualmente el cuadro de búsqueda por si había algo escrito
-                document.getElementById('modalGroupSearch').value = "";
-                document.getElementById('hiddenGroupSelect').value = "";
-                
-                alert(`✅ Welcome ${teacherData.name}! Your groups have been loaded.`);
-            } else {
-                alert("⚠️ No groups assigned to this teacher yet.");
-            }
-        } else {
-            alert("❌ Teacher not found in the database. Please check the email.");
-        }
+        groupOptions = teacherGroups.map((g) => ({ value: g, text: `${g} (${(groupDatabases[g] || []).length} people)` }));
+        modalGroupSearch.value = "";
+        hiddenGroupSelect.value = "";
+        alert(`✅ Welcome ${teacher.name}! Your groups have been loaded.`);
     } catch (error) {
         console.error("Error loading teacher groups:", error);
         alert("Error connecting to the database.");
     }
 }
-
-// Conectamos el botón nuevo con la función
-document.getElementById('loadGroupsBtn').addEventListener('click', loadTeacherGroups);
+document.getElementById("loadGroupsBtn").addEventListener("click", loadTeacherGroups);
 
 initializeScanner();

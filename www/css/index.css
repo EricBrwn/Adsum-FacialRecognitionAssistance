@@ -1,46 +1,149 @@
-body { text-align: center; background-color: #111; color: white; font-family: Arial, sans-serif; }
-video { border: 3px solid #4CAF50; border-radius: 10px; }
+/* =====================================================================
+   ADSUM SCANNER STYLES
+   ===================================================================== */
+* { box-sizing: border-box; }
 
-/* El contenedor que envuelve al video debe ser relativo */
+body {
+    margin: 0;
+    padding: 10px 12px 34px;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+    background-color: #111;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+.adsum-nav { margin-bottom: 0 !important; flex-shrink: 0; }
+
+.scanner-header { flex-shrink: 0; }
+.scanner-header h1 { margin: 0; font-size: clamp(20px, 3vw, 30px); }
+#scannerMessage { margin: 2px 0 0; font-size: 14px; color: #aaa; }
+
+/* --- Camera + overlay ------------------------------------------------
+   The container takes the EXACT aspect ratio of the camera stream (--ar is
+   set from JS), so the canvas boxes always line up with the faces. */
 #cameraContainer {
+    --ar: 1.3333;
     position: relative;
-    display: inline-block;
-    width: 100%;
-    max-width: 600px;
-    /* display: flex; */
-    justify-content: center;
-
+    flex-shrink: 1;
+    min-height: 0;
+    height: min(55vh, calc(96vw / var(--ar)));
+    width: calc(min(55vh, calc(96vw / var(--ar))) * var(--ar));
+    border: 4px solid #4CAF50;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
 }
 
-/* El canvas debe flotar de forma absoluta sobre el video */
-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none !important; /* REGLA DE ORO: Ignora los clics */
-}
-
-/* Aplicar espejo SOLO al video */
-#cameraContainer video {
-    transform: scaleX(-1);
-    -webkit-transform: scaleX(-1);
-}
-
-/* Asegurar que el lienzo transparente NO tenga espejo */
+#cameraContainer video,
 #cameraContainer canvas {
-    transform: scaleX(1) !important;
-    -webkit-transform: scaleX(1) !important;
     position: absolute;
-    top: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
+    object-fit: fill;
 }
+
+/* Mirror ONLY the video (more natural for the student). The canvas is not
+   mirrored: index.js flips the X coordinate so the text reads correctly. */
+#cameraContainer video { transform: scaleX(-1); -webkit-transform: scaleX(-1); }
+#cameraContainer canvas { pointer-events: none !important; }
+
+/* --- BIG BANNER ------------------------------------------------------ */
+.banner {
+    flex-shrink: 0;
+    width: min(96vw, 1100px);
+    padding: 14px 20px;
+    border-radius: 18px;
+    transition: background-color 0.25s, color 0.25s;
+}
+.banner__title {
+    font-size: clamp(34px, 6.5vw, 76px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.banner__subtitle {
+    margin-top: 6px;
+    font-size: clamp(18px, 2.8vw, 32px);
+    font-weight: 600;
+    min-height: 1.2em;
+}
+.banner--idle      { background: #1e222b; color: #cfd6df; }
+.banner--analyzing { background: #2b313c; color: #e6ebf1; }
+.banner--pending   { background: #f5a623; color: #111; }
+.banner--success   { background: #1f9d55; color: #fff; }
+.banner--unknown   { background: #c0392b; color: #fff; }
+.banner--idle .banner__title,
+.banner--analyzing .banner__title { font-size: clamp(26px, 4.5vw, 52px); }
+
+/* --- Recent check-ins ------------------------------------------------ */
+.recent-strip {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    min-height: 34px;
+}
+.recent-chip {
+    background: #1e2a22;
+    border: 1px solid #2ecc71;
+    color: #dfffe9;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 17px;
+    font-weight: bold;
+}
+.recent-chip small { color: #9fd8b4; font-weight: normal; margin-left: 4px; }
+
+/* --- Controls -------------------------------------------------------- */
+.controls-row {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.controls-row label { color: #aaa; font-weight: bold; }
+#cameraSelect {
+    padding: 8px;
+    border-radius: 8px;
+    background: #2a2d34;
+    color: white;
+    border: 2px solid #555;
+    outline: none;
+    cursor: pointer;
+    max-width: 280px;
+}
+
+.checkbox-row { display: flex; align-items: center; gap: 8px; color: #ddd; font-size: 14px; align-self: flex-start; }
+.excel-actions { display: flex; gap: 10px; width: 100%; }
+.excel-actions button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    color: white;
+    background-color: #217346; /* Excel green */
+}
+.excel-actions button:disabled { opacity: 0.6; cursor: wait; }
 
 /* Button and Modal Design */
-#openAdminBtn { display: block; margin: 20px auto; padding: 15px 30px; background-color: #34495e; color: white; border: none; border-radius: 50px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+#openAdminBtn { display: block; margin: 0; padding: 12px 26px; background-color: #34495e; color: white; border: none; border-radius: 50px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
 #adminModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; }
 
 /* 1. MAIN CONTAINER (Flexbox in action) */
@@ -272,26 +375,6 @@ canvas {
     font-weight: 500;
 }
 
-/* Asegura que el cuerpo no tenga barras de desplazamiento */
-body { 
-    margin: 0; 
-    padding: 0; 
-    height: 100vh; /* 100% de la altura de la pantalla */
-    overflow: hidden; /* Oculta el scroll */
-    display: flex; 
-    flex-direction: column; 
-    align-items: center; 
-}
-
-video { 
-    width: 100%; 
-    height: auto; 
-    max-height: 45vh; /* El video nunca ocupará más de la mitad de la pantalla */
-    border: 3px solid #4CAF50; 
-    border-radius: 10px; 
-    object-fit: cover;
-}
-
 /* Efecto opcional: se ilumina un poco si le pasas el mouse cerca */
 .watermark:hover {
     color: rgba(255, 255, 255, 0.8);
@@ -301,3 +384,18 @@ video {
     color: #fbc531; /* Un toque sutil del amarillo de tu diseño para tu nombre */
     opacity: 0.7;
 }
+/* --- Admin console --------------------------------------------------- */
+body.admin-page { height: auto; min-height: 100vh; overflow-y: auto; padding-bottom: 50px; }
+.admin-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; width: 100%; max-width: 1100px; }
+.admin-card { max-height: none; overflow: visible; text-align: left; align-items: stretch; max-width: 500px; }
+.admin-card h2 { text-align: center; }
+.admin-btn { width: 100%; padding: 14px; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
+.admin-help { margin: 0; color: #b9c2cf; font-size: 13px; line-height: 1.4; }
+.admin-report { font-size: 14px; color: #e0e0e0; }
+.admin-report table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.admin-report th, .admin-report td { border-bottom: 1px solid #444; padding: 6px 4px; text-align: right; }
+.admin-report td:first-child, .admin-report th:first-child { text-align: left; }
+.admin-report .suggestion { font-size: 17px; color: #fbc531; }
+.admin-report .warn { color: #f5a623; }
+.override-box { border-top: 1px solid #444; padding-top: 12px; }
+.link-btn { background: none; border: none; color: #7fd3ff; text-decoration: underline; cursor: pointer; padding: 6px 0; }

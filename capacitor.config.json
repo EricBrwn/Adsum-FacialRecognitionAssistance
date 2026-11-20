@@ -1,5 +1,14 @@
 {
   "appId": "com.ericbrwn.adsum",
   "appName": "Adsum",
-  "webDir": "www"
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": [
+      "login.microsoftonline.com",
+      "*.microsoftonline.com",
+      "login.live.com",
+      "*.tec.mx"
+    ]
+  }
 }

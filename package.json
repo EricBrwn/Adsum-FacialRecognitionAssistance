@@ -2,6 +2,12 @@
   "dependencies": {
     "@capacitor/android": "^8.4.1",
     "@capacitor/cli": "^8.4.1",
-    "@capacitor/core": "^8.4.1"
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/share": "^8.0.3"
+  },
+  "scripts": {
+    "test": "node tests/liveness.test.mjs",
+    "sync": "npx cap sync android"
   }
 }

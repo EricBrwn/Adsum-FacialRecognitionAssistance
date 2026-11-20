@@ -2,28 +2,41 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Adsum | Entry Scanner</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📸</text></svg>">
     <link rel="stylesheet" href="./css/index.css">
     <script src="face-api.min.js"></script>
+    <script src="vendor/xlsx.mini.min.js"></script>
+    <script src="js/config.js"></script>
     <script src="js/shared.js"></script>
 </head>
-<body>
+<body class="scanner-page">
 
-    <h1>Adsum Scanner</h1>
-    <p id="scannerMessage">Starting system...</p>
-    
+    <header class="scanner-header">
+        <h1>Adsum Scanner</h1>
+        <p id="scannerMessage">Starting system...</p>
+    </header>
+
     <div id="cameraContainer">
-        <video id="camera" width="720" height="560" autoplay muted playsinline></video>
+        <video id="camera" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
     </div>
 
-    <div style="margin-top: 15px;">
-        <label style="color: #aaa; font-weight: bold;">SELECT CAMERA: </label>
-        <select id="cameraSelect" style="padding: 8px; border-radius: 8px; background: #2a2d34; color: white; border: 2px solid #555; outline: none; cursor: pointer;"></select>
+    <!-- 🔠 BIG feedback for students (readable from ~2 m away) -->
+    <section id="banner" class="banner banner--idle" aria-live="polite">
+        <div id="bannerTitle" class="banner__title">Step in front of the camera</div>
+        <div id="bannerSubtitle" class="banner__subtitle"></div>
+    </section>
+
+    <div id="recentStrip" class="recent-strip"></div>
+
+    <div class="controls-row">
+        <label for="cameraSelect">Camera:</label>
+        <select id="cameraSelect"></select>
+        <button id="openAdminBtn">⚙️ Configure Roll Call</button>
     </div>
 
-    <button id="openAdminBtn">⚙️ Configure Roll Call</button>
-    
     <div id="adminModal">
         <div class="modal-content">
             <h2>Adsum Control Panel</h2>
@@ -33,14 +46,14 @@
                 <input type="email" id="teacherEmailInput" placeholder="e.g., profesor@escuela.com">
                 <button id="loadGroupsBtn">Load</button>
             </div>
-            
+
             <label class="modal-label">👥 Group: </label>
             <div style="position: relative; width: 100%;">
                 <input type="text" id="modalGroupSearch" placeholder="Search or select a group..." autocomplete="off">
                 <input type="hidden" id="hiddenGroupSelect" value="">
                 <div id="modalGroupResults" class="dropdown-results"></div>
             </div>
-    
+
             <label class="modal-label">⏰ Roll Call Time:</label>
             <div class="time-row">
                 <div>
@@ -56,8 +69,19 @@
             <label class="modal-label">📝 What session is it?</label>
             <input type="text" id="sessionInput" list="sessionList" placeholder="e.g., Session01, Session03...">
             <datalist id="sessionList"></datalist>
-    
+
+            <label class="checkbox-row">
+                <input type="checkbox" id="sendEmailsCheck" checked>
+                Email absent students and the teacher
+            </label>
+
             <button id="generateReportBtn">Generate Full Report</button>
+
+            <div id="excelActions" class="excel-actions" style="display:none;">
+                <button id="exportExcelBtn">📥 Download Excel</button>
+                <button id="syncExcelBtn">☁️ Sync to SharePoint Excel</button>
+            </div>
+
             <button id="closeModalBtn">Close Window</button>
 
             <div id="reportArea"></div>
